@@ -3,32 +3,33 @@
 
 from seahorse.prelude import *
 
-def weights(balances: Array[f64,3],price_list: Array[f64,3]) -> Array[f64,3]:
+def weights(balances: Array[f64,3],prices: Array[f64,3]) -> Array[f64,3]:
   """Returns an array with the weights of the tokens with respect to the current prices."""
-  assert len(balances)==len(price_list) , "Balance list and price list do not have the same length."
+  assert len(balances)==len(prices) , "Balance list and price list do not have the same length."
+  #n: u64 = len(balances) # :u64
   n=len(balances)
   B=0.0
   W=array(0.0,0.0,0.0)
   for j in range(n):
-    price=price_list[j]
+    price=prices[j]
     balance=balances[j]
     B+=price*balance
   for j in range(n):
-    price=price_list[j]
+    price=prices[j]
     balance=balances[j]
     W[j]=price*balance/B
   return W
 
 
-def compute_B_and_L(balances: Array[f64,3], LP_tokens_issued: Array[f64,3], price_list: Array[f64,3]) -> Tuple[f64,f64]:
+def compute_B_and_L(balances: Array[f64,3], LP_tokens_issued: Array[f64,3], prices: Array[f64,3]) -> Tuple[f64,f64]:
   """Returns a tuple with the values of B and L"""
-  assert len(balances)==len(price_list) , "Balance list and price list do not have the same length."
+  assert len(balances)==len(prices) , "Balance list and price list do not have the same length."
   assert len(balances)==len(LP_tokens_issued) , "Balance list and list of amount of LP tokens issued do not have the same length."
   n= len(balances)
   B=0.0
   L=0.0
   for j in range(n):
-    price=price_list[j]
+    price=prices[j]
     balance=balances[j]
     lptok=LP_tokens_issued[j]
     B+=price*balance
@@ -37,16 +38,16 @@ def compute_B_and_L(balances: Array[f64,3], LP_tokens_issued: Array[f64,3], pric
   return B,L
 
 
-def imbalance_ratios(balances: Array[f64,3], LP_tokens_issued: Array[f64,3], price_list: Array[f64,3]) -> Array[f64,3]:
+def imbalance_ratios(balances: Array[f64,3], LP_tokens_issued: Array[f64,3], prices: Array[f64,3]) -> Array[f64,3]:
   """Returns a list with the imbalance ratios of the tokens."""
-  assert len(balances)==len(price_list) , "Balance list and price list do not have the same length."
+  assert len(balances)==len(prices) , "Balance list and price list do not have the same length."
   assert len(balances)==len(LP_tokens_issued) , "Balance list and list of amount of LP tokens issued do not have the same length."
   n= len(balances)
   W=array(0.0,0.0,0.0)
   LP_tokens_list=list(LP_tokens_issued)
   balances_list=list(balances)
   LP_tokens_issued_copy=array(LP_tokens_issued[0],LP_tokens_issued[1],LP_tokens_issued[2])
-  B,L=compute_B_and_L(balances, LP_tokens_issued_copy, price_list)
+  B,L=compute_B_and_L(balances, LP_tokens_issued_copy, prices)
   for j in range(n):
     lptok=LP_tokens_list[j]
     #print(f"{B} {L} {lptok}")
@@ -69,6 +70,9 @@ def check_imbalance_ratios(balances: Array[f64,3], LP_tokens_issued: Array[f64,3
   balances_list[i]=bi+ai-pr_fee
   bo=balances_list[o]
   balances_list[o]=bo-ao
+  #balances0=balances[0]
+  #balances1=balances[1]
+  #balances2=balances[2]
   balances_after=array(balances_list[0],balances_list[1],balances_list[2])
   LP_tokens_issued_after=array(LP_tokens_issued[0],LP_tokens_issued[1],LP_tokens_issued[2])
   prices_after=array(prices[0],prices[1],prices[2])
@@ -77,11 +81,15 @@ def check_imbalance_ratios(balances: Array[f64,3], LP_tokens_issued: Array[f64,3
   imb_ratios_after_trade_array=imbalance_ratios(balances_after, LP_tokens_issued_after, prices_after)
   imb_ratios_after=list(imb_ratios_after_trade_array)
   print(f'Imbalance ratios after trade: {imb_ratios_after}')
+  #execute_trade=True
   print(f'{imb_ratios_after[o]<1.0-delta} {imb_ratios_after[o]<imb_ratios_before[o]} {imb_ratios_after[i]>1.0+delta} {imb_ratios_after[i]>imb_ratios_before[i]}')
   if (imb_ratios_after[o]<1.0-delta and imb_ratios_after[o]<imb_ratios_before[o]) or (imb_ratios_after[i]>1.0+delta and imb_ratios_after[i]>imb_ratios_before[i]):
-    # execute_trade=False
+    execute_trade=False
+    #print(f'Execute trade: {execute_trade}.')
     return False
   #else: execute_trade=True
+  #print(f'Execute trade: {execute_trade}.')
+  #return execute_trade
   return True
 
 
@@ -93,15 +101,15 @@ def funct_adjust_fee(x: f64) -> f64:
     """Base function that adjusts the fee."""
     return x**3.0
 
-def scaled_fee_and_leverage(balances: Array[f64,3], LP_tokens_issued: Array[f64,3], price_list: Array[f64,3], base_fee: f64, base_leverage_parameter: f64, i: u8, o: u8) -> Tuple[f64,f64]:
+def scaled_fee_and_leverage(balances: Array[f64,3], LP_tokens_issued: Array[f64,3], prices: Array[f64,3], base_fee: f64, base_leverage_parameter: f64, i: u8, o: u8) -> Tuple[f64,f64]:
     """Returns the scaled fee and leverage parameter for a trade where token i goes into the pool and
     token o goes out of the pool."""
-    imbalance=imbalance_ratios(balances, LP_tokens_issued, price_list)
+    imbalance=imbalance_ratios(balances, LP_tokens_issued, prices)
     print(f'Imbalance: {imbalance}')
     scaled_fee=funct_adjust_fee(imbalance[i])/funct_adjust_fee(imbalance[o])*base_fee
     scaled_leverage=funct_adjust_leverage_parameter(imbalance[o])/funct_adjust_leverage_parameter(imbalance[i])*base_leverage_parameter
     return scaled_fee,scaled_leverage
-
+    #return 0.0,0.0
 
 
 def trade_i(i: u8,o: u8,ai: f64, balances: Array[f64,3], LP_tokens_issued: Array[f64,3], prices: Array[f64,3],fee: f64,protocol_fee: f64,leverage: f64,delta: f64) -> Tuple[f64,f64,bool]:
@@ -126,6 +134,8 @@ def trade_i(i: u8,o: u8,ai: f64, balances: Array[f64,3], LP_tokens_issued: Array
     if balances_list[i]==0.0:
         ao=(1.0-fee)*ai*price_list[i]/price_list[o]
         pr_fee=protocol_fee*fee*ai
+        #balances_list[i]+=ai-pr_fee
+        #balances_list[o]-=ao
         print(f"--- Trade --- in: {i} --- out: {o}")
         print(f"Price list: {price_list}.")
         print(f"in: {ai} {i} --- out: {ao} {o}")
@@ -177,6 +187,18 @@ def trade_i(i: u8,o: u8,ai: f64, balances: Array[f64,3], LP_tokens_issued: Array
         execute_trade=check_imbalance_ratios(balances_copy_5, LP_tokens_issued_copy_5, prices_copy_5,i,o,ai,ao, pr_fee, delta)
         return ao,pr_fee,execute_trade
 
+
+
+    #C1=self.C/(bi**wi*bo**wo)
+    #self.C=C1*balances_list[i]**self.weights[i]*balances_list[o]**self.weights[o]
+    ## Now we update the weights again
+    #self.update_weights(price_list)
+    #if Verbose:
+        #print(f"--- Trade --- in: {self.labels[i]} --- out: {self.labels[o]}")
+        #print(f"Price list: {price_list}.")
+        #print(f"Leverage parameter: {leverage} --- Fee: {trading_fee*100} %")
+        #print(f"in: {ai} {self.labels[i]} --- out: {ao} {self.labels[o]}")
+        #print(f"Effective price: {(1.0-trading_fee)*ai/ao} {self.labels[i]}/{self.labels[o]} --- {ao/((1.0-trading_fee)*ai)} {self.labels[o]}/{self.labels[i]}")
     return 0.0,0.0,False
 
 
@@ -209,6 +231,8 @@ def trade_o(i: u8,o: u8,ao: f64, balances: Array[f64,3], LP_tokens_issued: Array
     if balances_list[i]==0.0:
         ai=ao*price_list[o]/price_list[i]/(1.0-fee)
         pr_fee=protocol_fee*fee*ai
+        #balances_list[i]+=ai-pr_fee
+        #balances_list[o]-=ao
         print(f"--- Trade --- in: {i} --- out: {o}")
         print(f"Price list: {price_list}.")
         print(f"in: {ai} {i} --- out: {ao} {o}")
@@ -231,7 +255,7 @@ def trade_o(i: u8,o: u8,ao: f64, balances: Array[f64,3], LP_tokens_issued: Array
         LP_tokens_issued_copy_5=array(LP_tokens_issued[0],LP_tokens_issued[1],LP_tokens_issued[2])
         prices_copy_5=array(prices[0],prices[1],prices[2])
         execute_trade=check_imbalance_ratios(balances_copy_5, LP_tokens_issued_copy_5, prices_copy_5,i,o,ai,ao, pr_fee, delta)
-        return ao,pr_fee,execute_trade
+        return ai,pr_fee,execute_trade
 
     if LP_tokens_list[o]!=0.0 and balances_list[i]!=0.0: # Self.balances[i]!=0 is not needed here, but added anyway just in case
         # We check imbalance ratio of token o
@@ -267,7 +291,7 @@ def trade_o(i: u8,o: u8,ao: f64, balances: Array[f64,3], LP_tokens_issued: Array
         print(f"Leverage parameter: {leverage} --- Fee: {trading_fee} %")
         print(f"in: {ai} {i} --- out: {ao} {o}")
         print(f"Effective price: {(1.0-trading_fee)*ai/ao} {i}/{o} --- {ao/((1.0-trading_fee)*ai)} {o}/{i}")
-        return ao,pr_fee,execute_trade
+        return ai,pr_fee,execute_trade
     return 0.0,0.0,False
 
 
@@ -283,9 +307,14 @@ def single_asset_deposit(i: u8, ai: f64, balances: Array[f64,3], LP_tokens_issue
         LP_tokens_issued_copy_1=array(LP_tokens_issued[0],LP_tokens_issued[1],LP_tokens_issued[2])
         prices_copy_1=array(prices[0],prices[1],prices[2])
         B,L=compute_B_and_L(balances_copy_1, LP_tokens_issued_copy_1, prices_copy_1)
-        lpt=ai*L/B
-        print("in:",ai,"Token",i,"--- out:",lpt,"LP tokens")
-        return lpt,i
+        if B==0.0:
+            lpt=ai
+            print("in:",ai,"Token",i,"--- out:",lpt,"LP tokens")
+            return lpt,i
+        if B!=0.0:
+            lpt=ai*L/B
+            print("in:",ai,"Token",i,"--- out:",lpt,"LP tokens")
+            return lpt,i
 
     if LP_tokens_list[i]!=0.0 and balances_list[i]!=0.0:
         balances_copy_2=array(balances[0],balances[1],balances[2])
@@ -298,16 +327,25 @@ def single_asset_deposit(i: u8, ai: f64, balances: Array[f64,3], LP_tokens_issue
         print("in:",ai,"Token",i,"--- out:",lpt,"LP tokens")
         return lpt,i
 
+    #self.balances[i]+=ai
+    #self.LP_tokens_issued[i]+=lpt
+
     return 0.0,0
 
 
 
-def single_asset_withdrawal(o: u8, lpt: f64, balances: Array[f64,3], LP_tokens_issued: Array[f64,3], prices: Array[f64,3],delta:f64) -> f64:
+def single_asset_withdrawal(o: u8, lpt: f64, balances: Array[f64,3], LP_tokens_issued: Array[f64,3], prices: Array[f64,3],delta:f64) -> Tuple[f64,f64,f64,f64,f64]:
     """ Given an amount of LP tokens and its type o,
-    returns the amount of token o to be given to the LP.
+    returns the amounts of each token to be given to the LP
+    (first three coordinates) and the value given to the LP
+    in terms of token o. The fifth coordinate is the remaining
+    amount of token o to be given to the LP (if any) in case the
+    process could not be completed.
     """
     LP_tokens_list=list(LP_tokens_issued)
     balances_list=list(balances)
+    #balances_before=balances_list.copy()
+    amounts_out=[0.0,0.0,0.0]
 
     a_remaining=[0.0]
     aol=[0.0]
@@ -337,7 +375,7 @@ def single_asset_withdrawal(o: u8, lpt: f64, balances: Array[f64,3], LP_tokens_i
         if lpt<Lo:
             M1=[0.0]
             if ro<=1.0-delta:
-                M1[0]=lpt*bo/Lo
+                M1[0]=lpt*bo/Lo  ############ M1 will not work
             if ro>1.0-delta:
                 balances_copy_3=array(balances[0],balances[1],balances[2])
                 LP_tokens_issued_copy_3=array(LP_tokens_issued[0],LP_tokens_issued[1],LP_tokens_issued[2])
@@ -347,11 +385,16 @@ def single_asset_withdrawal(o: u8, lpt: f64, balances: Array[f64,3], LP_tokens_i
                 M1[0]=bo-(1.0-delta)*(Lo-lpt)*B/L
             if ao<=M1[0]:
                 balances_list[o]-=ao
+                amounts_out[o]+=ao
                 print(f'Liquidity provider receives {ao} token {o}.')
                 LP_tokens_list[o]-=lpt
-                return ao
+                #if simulation:
+                    #balances_list=balances_before.copy()
+                    #LP_tokens_list[o]+=lpt
+                return amounts_out[0],amounts_out[1],amounts_out[2],ao,a_remaining[0]
             if ao>M1[0]:
                 balances_list[o]-=M1[0]
+                amounts_out[o]+=M1[0]
                 print(f'Liquidity provider receives {M1[0]} token {o}.')
                 a_remaining[0]=ao-M1[0]
                 # continue withdrawal with other token
@@ -361,11 +404,16 @@ def single_asset_withdrawal(o: u8, lpt: f64, balances: Array[f64,3], LP_tokens_i
             aol[0]=ao
             if ao<=bo:
                 balances_list[o]-=ao
+                amounts_out[o]+=ao
                 print(f'Liquidity provider receives {ao} token {o}.')
                 LP_tokens_list[o]-=lpt
-                return ao
+                #if simulation:
+                    #balances_list=balances_before.copy()
+                    #LP_tokens_list[o]+=lpt
+                return amounts_out[0],amounts_out[1],amounts_out[2],ao,a_remaining[0]
             if ao>bo:
                 balances_list[o]=0.0
+                amounts_out[o]+=bo
                 print(f'Liquidity provider receives {bo} token {o}.')
                 a_remaining[0]=ao-bo
                 # continue withdrawal with other token
@@ -393,7 +441,7 @@ def single_asset_withdrawal(o: u8, lpt: f64, balances: Array[f64,3], LP_tokens_i
           imb_ratios_j=imb_ratios[j]
           print(imb_ratios)
           print(max_imb_ratio_list[0])
-          if imb_ratios_j > max_imb_ratio_list[0]:
+          if imb_ratios_j > max_imb_ratio_list[0]: #######
             mylist[0]=u8(j)
             max_imb_ratio_list[0]=imb_ratios_j
         k=mylist[0]
@@ -411,10 +459,12 @@ def single_asset_withdrawal(o: u8, lpt: f64, balances: Array[f64,3], LP_tokens_i
         Mk=bk-(1.0-delta)*Lk*B/L
         if ak<=Mk:
             balances_list[k]-=ak
+            amounts_out[k]+=ak
             print(f'Liquidity provider receives {ak} token {k}.')
             a_remaining[0]=0.0
         if ak>Mk:
             balances_list[k]-=Mk
+            amounts_out[k]+=Mk
             print(f'Liquidity provider receives {Mk} token {k}.')
             a_remaining[0]-=Mk*price_list[k]/price_list[o]
         if prev_index[0]==k:
@@ -425,6 +475,8 @@ def single_asset_withdrawal(o: u8, lpt: f64, balances: Array[f64,3], LP_tokens_i
             ak=a_rem*price_o/price_k
             if ak<=balances_list[k]:
                 balances_list[k]-=ak
+                amounts_out[k]+=ak
+                print(f'Liquidity provider receives {ak} token {k}.')
                 a_remaining[0]=0.0
             else:
                 print(f'Remaining {a_remaining[0]} token {o}')
@@ -434,4 +486,13 @@ def single_asset_withdrawal(o: u8, lpt: f64, balances: Array[f64,3], LP_tokens_i
     LP_tokens_list[o]-=lpt
     print("in:",lpt,"LP tokens","--- out:",ao,"token",o,"(in value)")
 
-    return ao
+
+    #if simulation:
+        #balances_list=balances_before.copy()
+        #LP_tokens_list[o]+=lpt
+
+    return amounts_out[0],amounts_out[1],amounts_out[2],ao,a_remaining[0]
+
+
+def f64_to_u64_9_decimal_places(x: f64) -> u64:
+    return u64(floor(x*1000000000.0))
