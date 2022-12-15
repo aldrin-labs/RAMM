@@ -75,7 +75,7 @@ def check_imbalance_ratios(balances: Array[f64,3], LP_tokens_issued: Array[f64,3
   imb_ratios_after_trade_array=imbalance_ratios(balances_after, LP_tokens_issued_after, prices_after)
   imb_ratios_after=list(imb_ratios_after_trade_array)
   print(f'Imbalance ratios after trade: {imb_ratios_after}')
-  print(f'{imb_ratios_after[o]<1.0-delta} {imb_ratios_after[o]<imb_ratios_before[o]} {imb_ratios_after[i]>1.0+delta} {imb_ratios_after[i]>imb_ratios_before[i]}')
+  #print(f'{imb_ratios_after[o]<1.0-delta} {imb_ratios_after[o]<imb_ratios_before[o]} {imb_ratios_after[i]>1.0+delta} {imb_ratios_after[i]>imb_ratios_before[i]}')
   if (imb_ratios_after[o]<1.0-delta and imb_ratios_after[o]<imb_ratios_before[o]) or (imb_ratios_after[i]>1.0+delta and imb_ratios_after[i]>imb_ratios_before[i]):
     execute_trade=False
     return False
@@ -140,6 +140,16 @@ def trade_i(i: u8,o: u8,ai: f64, balances: Array[f64,3], LP_tokens_issued: Array
         bo=bo1*leverage
         wo=W[o]
         ao=bo*(1.0-(bi/(bi+(1.0-fee)*ai))**(wi/wo))
+        pr_fee=protocol_fee*fee*ai
+        print(f"--- Trade --- in: {i} --- out: {o}")
+        print(f"Price list: {price_list}.")
+        print(f"in: {ai} {i} --- out: {ao} {o}")
+        print(f"Effective price: {(1.0-fee)*ai/ao} {i}/{o} --- {ao/((1.0-fee)*ai)} {o}/{i}")
+        balances_copy_6=array(balances[0],balances[1],balances[2])
+        LP_tokens_issued_copy_6=array(LP_tokens_issued[0],LP_tokens_issued[1],LP_tokens_issued[2])
+        prices_copy_6=array(prices[0],prices[1],prices[2])
+        execute_trade=check_imbalance_ratios(balances_copy_6, LP_tokens_issued_copy_6, prices_copy_6,i,o,ai,ao, pr_fee, delta)
+        return ao,pr_fee,execute_trade
     if LP_tokens_list[o]!=0.0 and balances_list[i]!=0.0: # Self.balances[i]!=0 is not needed here, but added anyway just in case
         ## We check imbalance ratio of token o
         prices_copy_2=array(prices[0],prices[1],prices[2])
@@ -171,13 +181,11 @@ def trade_i(i: u8,o: u8,ai: f64, balances: Array[f64,3], LP_tokens_issued: Array
         LP_tokens_issued_copy_5=array(LP_tokens_issued[0],LP_tokens_issued[1],LP_tokens_issued[2])
         prices_copy_5=array(prices[0],prices[1],prices[2])
         execute_trade=check_imbalance_ratios(balances_copy_5, LP_tokens_issued_copy_5, prices_copy_5,i,o,ai,ao, pr_fee, delta)
+        print(f"--- Trade --- in: {i} --- out: {o}")
+        print(f"Price list: {price_list}.")
+        print(f"in: {ai} {i} --- out: {ao} {o}")
+        print(f"Effective price: {(1.0-fee)*ai/ao} {i}/{o} --- {ao/((1.0-fee)*ai)} {o}/{i}")
         return ao,pr_fee,execute_trade
-
-        #print(f"--- Trade --- in: {self.labels[i]} --- out: {self.labels[o]}")
-        #print(f"Price list: {price_list}.")
-        #print(f"Leverage parameter: {leverage} --- Fee: {trading_fee*100} %")
-        #print(f"in: {ai} {self.labels[i]} --- out: {ao} {self.labels[o]}")
-        #print(f"Effective price: {(1.0-trading_fee)*ai/ao} {self.labels[i]}/{self.labels[o]} --- {ao/((1.0-trading_fee)*ai)} {self.labels[o]}/{self.labels[i]}")
     return 0.0,0.0,False
 
 
@@ -228,6 +236,10 @@ def trade_o(i: u8,o: u8,ao: f64, balances: Array[f64,3], LP_tokens_issued: Array
         wo=W[o]
         ai=bi/(1.0-fee)*((bo/(bo-ao))**(wo/wi)-1.0)
         pr_fee=protocol_fee*fee*ai
+        print(f"--- Trade --- in: {i} --- out: {o}")
+        print(f"Price list: {price_list}.")
+        print(f"in: {ai} {i} --- out: {ao} {o}")
+        print(f"Effective price: {(1.0-fee)*ai/ao} {i}/{o} --- {ao/((1.0-fee)*ai)} {o}/{i}")
         balances_copy_5=array(balances[0],balances[1],balances[2])
         LP_tokens_issued_copy_5=array(LP_tokens_issued[0],LP_tokens_issued[1],LP_tokens_issued[2])
         prices_copy_5=array(prices[0],prices[1],prices[2])
