@@ -9,12 +9,6 @@ declare_id('4QtTJaWNGQBT1zoa3wuyewFXd1mCquGHL8hz69tuZ3Xu') # localhost
 
 
 
-#def f(x: f64) -> f64:
-    #return x*x
-
-#def g(x: f64) -> f64:
-    #return x+2.0
-
 @instruction
 def test(signer: Signer, balancesol: f64, balanceusdc: f64, balanceusdt: f64, pricesol: f64 , priceusdc: f64, priceusdt: f64, lptoksol: f64,lptokusdc: f64,lptokusdt: f64, basefee: f64, protocolfee: f64, baseleverage: f64, delta: f64, i: u8, o: u8, amount: f64,inout: str):
     balancearray=array(balancesol,balanceusdc,balanceusdt)
@@ -70,9 +64,6 @@ class oamm(Account):
     base_leverage: f64
     delta: f64
     bump: u8
-    #bump_lp_sol: u8
-    #bump_lp_usdc: u8
-    #bump_lp_usdt: u8
 
 
 @instruction
@@ -96,32 +87,27 @@ def init(owner: Signer, pool: Empty[oamm], basefee: f64, protocolfee: f64, basel
   pool.base_leverage=baseleverage
   pool.delta=delta
 
-  #bumpsol = mint_lpsol.bump()
+
   mint_lpsol.init(
     payer = owner,
     seeds = ['lp_sol-token-mint'],
     decimals = 9,
     authority = pool
   )
-  #pool.bump_lp_sol=bumpsol
 
-  #bumpusdc = mint_lpusdc.bump()
   mint_lpusdc.init(
     payer = owner,
     seeds = ['lp_usdc-token-mint'],
     decimals = 9,
     authority = pool
   )
-  #pool.bump_lp_usdc=bumpusdc
 
-  #bumpusdt = mint_lpusdc.bump()
   mint_lpusdt.init(
     payer = owner,
     seeds = ['lp_usdt-token-mint'],
     decimals = 9,
     authority = pool
   )
-  #pool.bump_lp_usdt=bumpusdt
 
 
 
@@ -142,7 +128,7 @@ def deposit_sol(user: Signer, user_lp_sol_tkn_acc: TokenAccount, pool: oamm, min
 
   user.transfer_lamports(
     to = pool,
-    amount = n  # *1000000000,
+    amount = n
   )
 
   mint_lpsol.mint(
@@ -182,15 +168,6 @@ def withdraw_sol(user: Signer, user_lp_sol_tkn_acc: TokenAccount, user_usdc_tkn_
   pool.lp_sol_tokens-=amount_lp_sol_to_burn
   print(f'{amount_lp_sol_to_burn} LPSOL burned from user {user.key()}.')
 
-  if amount_sol_out != 0.0:
-    n_sol = f64_to_u64_9_decimal_places(amount_sol_out)
-    pool.transfer_lamports(
-      to = user,
-      amount = n_sol
-    )
-    pool.balance_sol-=amount_sol_out
-    print(f'User {user.key()} withdrew {amount_sol_out} SOL.')
-
   if amount_usdc_out != 0.0:
     n_usdc = f64_to_u64_9_decimal_places(amount_usdc_out)
     pool_usdc_tkn_acc.transfer(
@@ -213,6 +190,14 @@ def withdraw_sol(user: Signer, user_lp_sol_tkn_acc: TokenAccount, user_usdc_tkn_
     pool.balance_usdt-=amount_usdt_out
     print(f'User {user.key()} withdrew {amount_usdt_out} USDT.')
 
+  if amount_sol_out != 0.0:
+    n_sol = f64_to_u64_9_decimal_places(amount_sol_out)
+    pool.transfer_lamports(
+      to = user,
+      amount = n_sol
+    )
+    pool.balance_sol-=amount_sol_out
+    print(f'User {user.key()} withdrew {amount_sol_out} SOL.')
 
 @instruction
 def deposit_usdc(user: Signer, user_usdc_tkn_acc: TokenAccount, user_lp_usdc_tkn_acc: TokenAccount, pool: oamm, pool_usdc_tkn_acc: TokenAccount, mintaccount: TokenMint, amount_usdc: f64, price_account_sol: PriceAccount, price_account_usdc: PriceAccount, price_account_usdt: PriceAccount):
@@ -271,15 +256,6 @@ def withdraw_usdc(user: Signer, user_lp_usdc_tkn_acc: TokenAccount, user_usdc_tk
   pool.lp_usdc_tokens-=amount_lp_usdc_to_burn
   print(f'{amount_lp_usdc_to_burn} LPUSDC burned from user {user.key()}.')
 
-  if amount_sol_out != 0.0:
-    n_sol = f64_to_u64_9_decimal_places(amount_sol_out)
-    pool.transfer_lamports(
-      to = user,
-      amount = n_sol
-    )
-    pool.balance_sol-=amount_sol_out
-    print(f'User {user.key()} withdrew {amount_sol_out} SOL.')
-
   if amount_usdc_out != 0.0:
     n_usdc = f64_to_u64_9_decimal_places(amount_usdc_out)
     pool_usdc_tkn_acc.transfer(
@@ -302,9 +278,14 @@ def withdraw_usdc(user: Signer, user_lp_usdc_tkn_acc: TokenAccount, user_usdc_tk
     pool.balance_usdt-=amount_usdt_out
     print(f'User {user.key()} withdrew {amount_usdt_out} USDT.')
 
-
-
-
+  if amount_sol_out != 0.0:
+    n_sol = f64_to_u64_9_decimal_places(amount_sol_out)
+    pool.transfer_lamports(
+      to = user,
+      amount = n_sol
+    )
+    pool.balance_sol-=amount_sol_out
+    print(f'User {user.key()} withdrew {amount_sol_out} SOL.')
 
 
 
@@ -366,15 +347,6 @@ def withdraw_usdt(user: Signer, user_lp_usdt_tkn_acc: TokenAccount, user_usdc_tk
   pool.lp_usdt_tokens-=amount_lp_usdt_to_burn
   print(f'{amount_lp_usdt_to_burn} LPUSDC burned from user {user.key()}.')
 
-  if amount_sol_out != 0.0:
-    n_sol = f64_to_u64_9_decimal_places(amount_sol_out)
-    pool.transfer_lamports(
-      to = user,
-      amount = n_sol
-    )
-    pool.balance_sol-=amount_sol_out
-    print(f'User {user.key()} withdrew {amount_sol_out} SOL.')
-
   if amount_usdc_out != 0.0:
     n_usdc = f64_to_u64_9_decimal_places(amount_usdc_out)
     pool_usdc_tkn_acc.transfer(
@@ -397,6 +369,14 @@ def withdraw_usdt(user: Signer, user_lp_usdt_tkn_acc: TokenAccount, user_usdc_tk
     pool.balance_usdt-=amount_usdt_out
     print(f'User {user.key()} withdrew {amount_usdt_out} USDT.')
 
+  if amount_sol_out != 0.0:
+    n_sol = f64_to_u64_9_decimal_places(amount_sol_out)
+    pool.transfer_lamports(
+      to = user,
+      amount = n_sol
+    )
+    pool.balance_sol-=amount_sol_out
+    print(f'User {user.key()} withdrew {amount_sol_out} SOL.')
 
 
 @instruction
@@ -441,16 +421,6 @@ def trade_sol_in(user: Signer, user_usd_tkn_acc: TokenAccount, pool: oamm, pool_
     n_pr_fee = f64_to_u64_9_decimal_places(pr_fee)
     amount_out = f64_to_u64_9_decimal_places(ao)
 
-    user.transfer_lamports(
-      to = pool,
-      amount = amount_in
-    )
-    pool.transfer_lamports(
-      to = fee_acc_sol,
-      amount = n_pr_fee
-    )
-    pool.balance_sol+=amount_sol_in-pr_fee
-
     bump = pool.bump
 
     pool_usd_tkn_acc.transfer(
@@ -464,6 +434,15 @@ def trade_sol_in(user: Signer, user_usd_tkn_acc: TokenAccount, pool: oamm, pool_
     elif token_out == 'USDT':
       pool.balance_usdt-=ao
 
+    user.transfer_lamports(
+      to = pool,
+      amount = amount_in
+    )
+    pool.transfer_lamports(
+      to = fee_acc_sol,
+      amount = n_pr_fee
+    )
+    pool.balance_sol+=amount_sol_in-pr_fee
 
   if amount_sol_in == 0.0:
 
@@ -482,15 +461,6 @@ def trade_sol_in(user: Signer, user_usd_tkn_acc: TokenAccount, pool: oamm, pool_
     n_pr_fee = f64_to_u64_9_decimal_places(pr_fee)
     amount_out = f64_to_u64_9_decimal_places(amount_usd_out)
 
-    user.transfer_lamports(
-      to = pool,
-      amount = amount_in
-    )
-    pool.transfer_lamports(
-      to = fee_acc_sol,
-      amount = n_pr_fee
-    )
-    pool.balance_sol+=ai-pr_fee
 
     bump = pool.bump
 
@@ -504,6 +474,16 @@ def trade_sol_in(user: Signer, user_usd_tkn_acc: TokenAccount, pool: oamm, pool_
       pool.balance_usdc-=amount_usd_out
     elif token_out == 'USDT':
       pool.balance_usdt-=amount_usd_out
+
+    user.transfer_lamports(
+      to = pool,
+      amount = amount_in
+    )
+    pool.transfer_lamports(
+      to = fee_acc_sol,
+      amount = n_pr_fee
+    )
+    pool.balance_sol+=ai-pr_fee
 
 @instruction
 def trade_sol_out(user: Signer, user_usd_tkn_acc: TokenAccount, pool: oamm, pool_usd_tkn_acc: TokenAccount, amount_usd_in: f64, amount_sol_out: f64, token_in: str, fee_acc_usd: TokenAccount, price_account_sol: PriceAccount, price_account_usdc: PriceAccount, price_account_usdt: PriceAccount):
