@@ -200,7 +200,7 @@ def withdraw_sol(user: Signer, user_lp_sol_tkn_acc: TokenAccount, user_usdc_tkn_
     print(f'User {user.key()} withdrew {amount_sol_out} SOL.')
 
 @instruction
-def deposit_usdc(user: Signer, user_usdc_tkn_acc: TokenAccount, user_lp_usdc_tkn_acc: TokenAccount, pool: oamm, pool_usdc_tkn_acc: TokenAccount, mintaccount: TokenMint, amount_usdc: f64, price_account_sol: PriceAccount, price_account_usdc: PriceAccount, price_account_usdt: PriceAccount):
+def deposit_usdc(user: Signer, user_usdc_tkn_acc: TokenAccount, user_lp_usdc_tkn_acc: TokenAccount, pool: oamm, pool_usdc_tkn_acc: TokenAccount, mint_lpusdc: TokenMint, amount_usdc: f64, price_account_sol: PriceAccount, price_account_usdc: PriceAccount, price_account_usdt: PriceAccount):
 
   n = f64_to_u64_9_decimal_places(amount_usdc)
   balances = array(pool.balance_sol,pool.balance_usdc,pool.balance_usdt)
@@ -219,7 +219,7 @@ def deposit_usdc(user: Signer, user_usdc_tkn_acc: TokenAccount, user_lp_usdc_tkn
     amount = n
   )
 
-  mintaccount.mint(
+  mint_lpusdc.mint(
     authority = pool,
     to = user_lp_usdc_tkn_acc,
     amount = m,
@@ -290,7 +290,7 @@ def withdraw_usdc(user: Signer, user_lp_usdc_tkn_acc: TokenAccount, user_usdc_tk
 
 
 @instruction
-def deposit_usdt(user: Signer, user_usdt_tkn_acc: TokenAccount, user_lp_usdt_tkn_acc: TokenAccount, pool: oamm, pool_usdt_tkn_acc: TokenAccount, mintaccount: TokenMint, amount_usdt: f64, price_account_sol: PriceAccount, price_account_usdc: PriceAccount, price_account_usdt: PriceAccount):
+def deposit_usdt(user: Signer, user_usdt_tkn_acc: TokenAccount, user_lp_usdt_tkn_acc: TokenAccount, pool: oamm, pool_usdt_tkn_acc: TokenAccount, mint_lpusdt: TokenMint, amount_usdt: f64, price_account_sol: PriceAccount, price_account_usdc: PriceAccount, price_account_usdt: PriceAccount):
 
   n = f64_to_u64_9_decimal_places(amount_usdt)
   balances = array(pool.balance_sol,pool.balance_usdc,pool.balance_usdt)
@@ -309,7 +309,7 @@ def deposit_usdt(user: Signer, user_usdt_tkn_acc: TokenAccount, user_lp_usdt_tkn
     amount = n
   )
 
-  mintaccount.mint(
+  mint_lpusdt.mint(
     authority = pool,
     to = user_lp_usdt_tkn_acc,
     amount = m,
