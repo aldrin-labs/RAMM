@@ -816,6 +816,7 @@ def pool_state(user: Signer, pool: oamm, price_account_sol: PriceAccount, price_
 
 @instruction
 def update_pool_state(user: Signer, pool: oamm, sol_update: f64, usdc_update: f64, usdt_update: f64, lp_sol_update: f64, lp_usdc_update: f64, lp_usdt_update: f64):
+    assert str(user.key()) == 'DzgBxedPKCuWbK4a4P9Bj4nNdayVzZEqc7n6YZ1A4sLa', "You are not allowed to call this instruction."
     pool.balance_sol+=sol_update
     pool.balance_usdc+=usdc_update
     pool.balance_usdt+=usdt_update
