@@ -6,7 +6,7 @@ The particular code of this repository is designed for a SOL/USDC/USDT pool, but
 
 One of the features of the OAMM is that liquidity providers can provide liquidity of just one asset, and the pool will mint a certain type of LP tokens according to the asset the liquidity provider is depositing. In consequence, this particular pool will mint three types of LP tokens: `LPSOL`, `LPUSDC` and `LPUSDT`.
 
-## Code walthrough
+## Code walkthrough
 
 Each OAMM pool consists of a single account that belongs to the `oamm` class and contains the data described below.
 
