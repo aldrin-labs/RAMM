@@ -2,54 +2,12 @@
 # Built with Seahorse v0.2.5
 
 from lib.math import *
+from lib.accounts import *
 from seahorse.prelude import *
 from seahorse.pyth import *
 
-declare_id('4QtTJaWNGQBT1zoa3wuyewFXd1mCquGHL8hz69tuZ3Xu') # localhost
+declare_id('4QtTJaWNGQBT1zoa3wuyewFXd1mCquGHL8hz69tuZ3Xu') # devnet
 
-
-
-@instruction
-def test(signer: Signer, balancesol: f64, balanceusdc: f64, balanceusdt: f64, pricesol: f64 , priceusdc: f64, priceusdt: f64, lptoksol: f64,lptokusdc: f64,lptokusdt: f64, basefee: f64, protocolfee: f64, baseleverage: f64, delta: f64, i: u8, o: u8, amount: f64,inout: str):
-    balancearray=array(balancesol,balanceusdc,balanceusdt)
-    balancearray2=array(balancesol,balanceusdc,balanceusdt)
-    balancearray3=array(balancesol,balanceusdc,balanceusdt)
-    pricearray=array(pricesol,priceusdc,priceusdt)
-    pricearray2=array(pricesol,priceusdc,priceusdt)
-    pricearray3=array(pricesol,priceusdc,priceusdt)
-    lptokenarray=array(lptoksol,lptokusdc,lptokusdt)
-    lptokenarray2=array(lptoksol,lptokusdc,lptokusdt)
-    lptokenarray3=array(lptoksol,lptokusdc,lptokusdt)
-    W=weights(balancearray,pricearray)
-    I=imbalance_ratios(balancearray2,lptokenarray2,pricearray2)
-    scaled_fee,scaled_leverage=scaled_fee_and_leverage(balancearray3,lptokenarray3,pricearray3,basefee,baseleverage,0,1)
-    print(f'Weights: {W[0]}, {W[1]}, {W[2]}.')
-    print(f'Imbalance ratios: {I[0]}, {I[1]}, {I[2]}.')
-    print(f'Scaled fee: {scaled_fee} - Scaled leverage: {scaled_leverage}')
-    # Trade
-    if inout=='in':
-        balancearray4=array(balancesol,balanceusdc,balanceusdt)
-        lptokenarray4=array(lptoksol,lptokusdc,lptokusdt)
-        pricearray4=array(pricesol,priceusdc,priceusdt)
-        ao,pr_fee,execute_trade=trade_i(i,o,amount, balancearray4,lptokenarray4,pricearray4,basefee,protocolfee,baseleverage,delta)
-        print(f'ao: {ao} - pr fee: {pr_fee} - Execute trade: {execute_trade}')
-    if inout=='out':
-        balancearray4=array(balancesol,balanceusdc,balanceusdt)
-        lptokenarray4=array(lptoksol,lptokusdc,lptokusdt)
-        pricearray4=array(pricesol,priceusdc,priceusdt)
-        ai,pr_fee,execute_trade=trade_o(i,o,amount, balancearray4,lptokenarray4,pricearray4,basefee,protocolfee,baseleverage,delta)
-        print(f'ai: {ai} - pr fee: {pr_fee} - Execute trade: {execute_trade}')
-    if inout=='dep':
-        balancearray4=array(balancesol,balanceusdc,balanceusdt)
-        lptokenarray4=array(lptoksol,lptokusdc,lptokusdt)
-        pricearray4=array(pricesol,priceusdc,priceusdt)
-        lpt,i1=single_asset_deposit(i,amount, balancearray4,lptokenarray4,pricearray4)
-        print(f'Deposit: amount: {amount} - token: {i1} - LP tokens: {lpt}')
-    if inout=='with':
-        balancearray4=array(balancesol,balanceusdc,balanceusdt)
-        lptokenarray4=array(lptoksol,lptokusdc,lptokusdt)
-        pricearray4=array(pricesol,priceusdc,priceusdt)
-        single_asset_withdrawal(o, amount, balancearray4,lptokenarray4,pricearray4,delta)
 
 
 class oamm(Account):
@@ -114,6 +72,10 @@ def init(owner: Signer, pool: Empty[oamm], basefee: f64, protocolfee: f64, basel
 
 @instruction
 def deposit_sol(user: Signer, user_lp_sol_tkn_acc: TokenAccount, pool: oamm, mint_lpsol: TokenMint, amount_sol: f64, price_account_sol: PriceAccount, price_account_usdc: PriceAccount, price_account_usdt: PriceAccount):
+  # We check account mints.
+  owner_pubkey, mint_usdc_pubkey, mint_usdt_pubkey, pool_pubkey, pool_usdc_token_account_pubkey, pool_usdt_token_account_pubkey, pool_mint_lp_sol_pubkey, pool_mint_lp_usdc_pubkey, pool_mint_lp_usdt_pubkey, fee_account_sol_pubkey, fee_account_usdc_pubkey, fee_account_usdt_pubkey = get_public_keys()
+  assert str(mint_lpsol.key()) == pool_mint_lp_sol_pubkey, "Invalid TokenMint account."
+  #assert str(user_lp_sol_tkn_acc.mint()) == pool_mint_lp_sol_pubkey, f"Token account {user_lp_sol_tkn_acc.key()} is not of the correct mint type (expected mint {pool_mint_lp_sol_pubkey})."
 
   n = f64_to_u64_9_decimal_places(amount_sol)
   balances = array(pool.balance_sol,pool.balance_usdc,pool.balance_usdt)
@@ -146,6 +108,12 @@ def deposit_sol(user: Signer, user_lp_sol_tkn_acc: TokenAccount, pool: oamm, min
 
 @instruction
 def withdraw_sol(user: Signer, user_lp_sol_tkn_acc: TokenAccount, user_usdc_tkn_acc: TokenAccount, user_usdt_tkn_acc: TokenAccount, pool: oamm, pool_usdc_tkn_acc: TokenAccount, pool_usdt_tkn_acc: TokenAccount, mint_lpsol: TokenMint, amount_lp_sol: f64, price_account_sol: PriceAccount, price_account_usdc: PriceAccount, price_account_usdt: PriceAccount):
+  # We check accounts and mints.
+  owner_pubkey, mint_usdc_pubkey, mint_usdt_pubkey, pool_pubkey, pool_usdc_token_account_pubkey, pool_usdt_token_account_pubkey, pool_mint_lp_sol_pubkey, pool_mint_lp_usdc_pubkey, pool_mint_lp_usdt_pubkey, fee_account_sol_pubkey, fee_account_usdc_pubkey, fee_account_usdt_pubkey = get_public_keys()
+  assert str(mint_lpsol.key()) == pool_mint_lp_sol_pubkey, "Invalid TokenMint account."
+  assert str(pool.key()) == pool_pubkey, "Invalid pool account."
+  assert str(pool_usdc_tkn_acc.key()) == pool_usdc_token_account_pubkey, "Invalid pool token account."
+  assert str(pool_usdt_tkn_acc.key()) == pool_usdt_token_account_pubkey, "Invalid pool token account."
 
   balances = array(pool.balance_sol,pool.balance_usdc,pool.balance_usdt)
   LP_tokens_issued = array(pool.lp_sol_tokens,pool.lp_usdc_tokens,pool.lp_usdt_tokens)
@@ -201,6 +169,10 @@ def withdraw_sol(user: Signer, user_lp_sol_tkn_acc: TokenAccount, user_usdc_tkn_
 
 @instruction
 def deposit_usdc(user: Signer, user_usdc_tkn_acc: TokenAccount, user_lp_usdc_tkn_acc: TokenAccount, pool: oamm, pool_usdc_tkn_acc: TokenAccount, mint_lpusdc: TokenMint, amount_usdc: f64, price_account_sol: PriceAccount, price_account_usdc: PriceAccount, price_account_usdt: PriceAccount):
+  # We check account mints.
+  owner_pubkey, mint_usdc_pubkey, mint_usdt_pubkey, pool_pubkey, pool_usdc_token_account_pubkey, pool_usdt_token_account_pubkey, pool_mint_lp_sol_pubkey, pool_mint_lp_usdc_pubkey, pool_mint_lp_usdt_pubkey, fee_account_sol_pubkey, fee_account_usdc_pubkey, fee_account_usdt_pubkey = get_public_keys()
+  assert str(mint_lpusdc.key()) == pool_mint_lp_usdc_pubkey, "Invalid TokenMint account."
+  #assert str(user_lp_usdc_tkn_acc.mint()) == pool_mint_lp_usdc_pubkey, f"Token account {user_lp_usdc_tkn_acc.key()} is not of the correct mint type (expected mint {pool_mint_lp_usdc_pubkey})."
 
   n = f64_to_u64_9_decimal_places(amount_usdc)
   balances = array(pool.balance_sol,pool.balance_usdc,pool.balance_usdt)
@@ -234,6 +206,12 @@ def deposit_usdc(user: Signer, user_usdc_tkn_acc: TokenAccount, user_lp_usdc_tkn
 
 @instruction
 def withdraw_usdc(user: Signer, user_lp_usdc_tkn_acc: TokenAccount, user_usdc_tkn_acc: TokenAccount, user_usdt_tkn_acc: TokenAccount, pool: oamm, pool_usdc_tkn_acc: TokenAccount, pool_usdt_tkn_acc: TokenAccount, mint_lpusdc: TokenMint, amount_lp_usdc: f64, price_account_sol: PriceAccount, price_account_usdc: PriceAccount, price_account_usdt: PriceAccount):
+  # We check accounts and mints.
+  owner_pubkey, mint_usdc_pubkey, mint_usdt_pubkey, pool_pubkey, pool_usdc_token_account_pubkey, pool_usdt_token_account_pubkey, pool_mint_lp_sol_pubkey, pool_mint_lp_usdc_pubkey, pool_mint_lp_usdt_pubkey, fee_account_sol_pubkey, fee_account_usdc_pubkey, fee_account_usdt_pubkey = get_public_keys()
+  assert str(mint_lpusdc.key()) == pool_mint_lp_usdc_pubkey, "Invalid TokenMint account."
+  assert str(pool.key()) == pool_pubkey, "Invalid pool account."
+  assert str(pool_usdc_tkn_acc.key()) == pool_usdc_token_account_pubkey, "Invalid pool token account."
+  assert str(pool_usdt_tkn_acc.key()) == pool_usdt_token_account_pubkey, "Invalid pool token account."
 
   balances = array(pool.balance_sol,pool.balance_usdc,pool.balance_usdt)
   LP_tokens_issued = array(pool.lp_sol_tokens,pool.lp_usdc_tokens,pool.lp_usdt_tokens)
@@ -291,6 +269,9 @@ def withdraw_usdc(user: Signer, user_lp_usdc_tkn_acc: TokenAccount, user_usdc_tk
 
 @instruction
 def deposit_usdt(user: Signer, user_usdt_tkn_acc: TokenAccount, user_lp_usdt_tkn_acc: TokenAccount, pool: oamm, pool_usdt_tkn_acc: TokenAccount, mint_lpusdt: TokenMint, amount_usdt: f64, price_account_sol: PriceAccount, price_account_usdc: PriceAccount, price_account_usdt: PriceAccount):
+  # We check account mints.
+  owner_pubkey, mint_usdc_pubkey, mint_usdt_pubkey, pool_pubkey, pool_usdc_token_account_pubkey, pool_usdt_token_account_pubkey, pool_mint_lp_sol_pubkey, pool_mint_lp_usdc_pubkey, pool_mint_lp_usdt_pubkey, fee_account_sol_pubkey, fee_account_usdc_pubkey, fee_account_usdt_pubkey = get_public_keys()
+  assert str(mint_lpusdt.key()) == pool_mint_lp_usdt_pubkey, "Invalid TokenMint account."
 
   n = f64_to_u64_9_decimal_places(amount_usdt)
   balances = array(pool.balance_sol,pool.balance_usdc,pool.balance_usdt)
@@ -324,6 +305,12 @@ def deposit_usdt(user: Signer, user_usdt_tkn_acc: TokenAccount, user_lp_usdt_tkn
 
 @instruction
 def withdraw_usdt(user: Signer, user_lp_usdt_tkn_acc: TokenAccount, user_usdc_tkn_acc: TokenAccount, user_usdt_tkn_acc: TokenAccount, pool: oamm, pool_usdc_tkn_acc: TokenAccount, pool_usdt_tkn_acc: TokenAccount, mint_lpusdt: TokenMint, amount_lp_usdt: f64, price_account_sol: PriceAccount, price_account_usdc: PriceAccount, price_account_usdt: PriceAccount):
+  # We check accounts and mints.
+  owner_pubkey, mint_usdc_pubkey, mint_usdt_pubkey, pool_pubkey, pool_usdc_token_account_pubkey, pool_usdt_token_account_pubkey, pool_mint_lp_sol_pubkey, pool_mint_lp_usdc_pubkey, pool_mint_lp_usdt_pubkey, fee_account_sol_pubkey, fee_account_usdc_pubkey, fee_account_usdt_pubkey = get_public_keys()
+  assert str(mint_lpusdt.key()) == pool_mint_lp_usdt_pubkey, "Invalid TokenMint account."
+  assert str(pool.key()) == pool_pubkey, "Invalid pool account."
+  assert str(pool_usdc_tkn_acc.key()) == pool_usdc_token_account_pubkey, "Invalid pool token account."
+  assert str(pool_usdt_tkn_acc.key()) == pool_usdt_token_account_pubkey, "Invalid pool token account."
 
   balances = array(pool.balance_sol,pool.balance_usdc,pool.balance_usdt)
   LP_tokens_issued = array(pool.lp_sol_tokens,pool.lp_usdc_tokens,pool.lp_usdt_tokens)
@@ -381,6 +368,23 @@ def withdraw_usdt(user: Signer, user_lp_usdt_tkn_acc: TokenAccount, user_usdc_tk
 
 @instruction
 def trade_sol_in(user: Signer, user_usd_tkn_acc: TokenAccount, pool: oamm, pool_usd_tkn_acc: TokenAccount, amount_sol_in: f64, amount_usd_out: f64, token_out: str, fee_acc_sol: UncheckedAccount, price_account_sol: PriceAccount, price_account_usdc: PriceAccount, price_account_usdt: PriceAccount):
+  # We check accounts and mints.
+  owner_pubkey, mint_usdc_pubkey, mint_usdt_pubkey, pool_pubkey, pool_usdc_token_account_pubkey, pool_usdt_token_account_pubkey, pool_mint_lp_sol_pubkey, pool_mint_lp_usdc_pubkey, pool_mint_lp_usdt_pubkey, fee_account_sol_pubkey, fee_account_usdc_pubkey, fee_account_usdt_pubkey = get_public_keys()
+  assert str(pool.key()) == pool_pubkey, "Invalid pool account."
+  assert str(fee_acc_sol.key()) == fee_account_sol_pubkey, "Invalid fee account."
+
+  out=[0]
+
+  if token_out == 'USDC':
+    assert str(pool_usd_tkn_acc.key()) == pool_usdc_token_account_pubkey, "Invalid pool token account."
+    out[0]=1
+  elif token_out == 'USDT':
+    assert str(pool_usd_tkn_acc.key()) == pool_usdt_token_account_pubkey, "Invalid pool token account."
+    out[0]=2
+  else:
+    return None
+
+  o=out[0]
 
   balances = array(pool.balance_sol,pool.balance_usdc,pool.balance_usdt)
   LP_tokens_issued = array(pool.lp_sol_tokens,pool.lp_usdc_tokens,pool.lp_usdt_tokens)
@@ -393,17 +397,6 @@ def trade_sol_in(user: Signer, user_usd_tkn_acc: TokenAccount, pool: oamm, pool_
   protocol_fee=pool.protocol_fee
   delta=pool.delta
   leverage=pool.base_leverage
-
-  out=[0]
-
-  if token_out == 'USDC':
-    out[0]=1
-  elif token_out == 'USDT':
-    out[0]=2
-  else:
-    return None
-
-  o=out[0]
 
   if amount_sol_in != 0.0:
 
@@ -487,6 +480,24 @@ def trade_sol_in(user: Signer, user_usd_tkn_acc: TokenAccount, pool: oamm, pool_
 
 @instruction
 def trade_sol_out(user: Signer, user_usd_tkn_acc: TokenAccount, pool: oamm, pool_usd_tkn_acc: TokenAccount, amount_usd_in: f64, amount_sol_out: f64, token_in: str, fee_acc_usd: TokenAccount, price_account_sol: PriceAccount, price_account_usdc: PriceAccount, price_account_usdt: PriceAccount):
+  # We check accounts and mints.
+  owner_pubkey, mint_usdc_pubkey, mint_usdt_pubkey, pool_pubkey, pool_usdc_token_account_pubkey, pool_usdt_token_account_pubkey, pool_mint_lp_sol_pubkey, pool_mint_lp_usdc_pubkey, pool_mint_lp_usdt_pubkey, fee_account_sol_pubkey, fee_account_usdc_pubkey, fee_account_usdt_pubkey = get_public_keys()
+  assert str(pool.key()) == pool_pubkey, "Invalid pool account."
+
+  tok_in=[0]
+
+  if token_in == 'USDC':
+    assert str(pool_usd_tkn_acc.key()) == pool_usdc_token_account_pubkey, "Invalid pool token account."
+    assert str(fee_acc_usd.key()) == fee_account_usdc_pubkey, "Invalid fee account."
+    tok_in[0]=1
+  elif token_in == 'USDT':
+    assert str(pool_usd_tkn_acc.key()) == pool_usdt_token_account_pubkey, "Invalid pool token account."
+    assert str(fee_acc_usd.key()) == fee_account_usdt_pubkey, "Invalid fee account."
+    tok_in[0]=2
+  else:
+    return None
+
+  i=tok_in[0]
 
   balances = array(pool.balance_sol,pool.balance_usdc,pool.balance_usdt)
   LP_tokens_issued = array(pool.lp_sol_tokens,pool.lp_usdc_tokens,pool.lp_usdt_tokens)
@@ -499,17 +510,6 @@ def trade_sol_out(user: Signer, user_usd_tkn_acc: TokenAccount, pool: oamm, pool
   protocol_fee=pool.protocol_fee
   delta=pool.delta
   leverage=pool.base_leverage
-
-  tok_in=[0]
-
-  if token_in == 'USDC':
-    tok_in[0]=1
-  elif token_in == 'USDT':
-    tok_in[0]=2
-  else:
-    return None
-
-  i=tok_in[0]
 
   if amount_usd_in != 0.0:
 
@@ -594,6 +594,12 @@ def trade_sol_out(user: Signer, user_usd_tkn_acc: TokenAccount, pool: oamm, pool
 
 @instruction
 def trade_usdc_in_usdt_out(user: Signer, user_usdc_tkn_acc: TokenAccount, user_usdt_tkn_acc: TokenAccount, pool: oamm, pool_usdc_tkn_acc: TokenAccount, pool_usdt_tkn_acc: TokenAccount, amount_usdc_in: f64, amount_usdt_out: f64, fee_acc_usdc: TokenAccount, price_account_sol: PriceAccount, price_account_usdc: PriceAccount, price_account_usdt: PriceAccount):
+  # We check accounts and mints.
+  owner_pubkey, mint_usdc_pubkey, mint_usdt_pubkey, pool_pubkey, pool_usdc_token_account_pubkey, pool_usdt_token_account_pubkey, pool_mint_lp_sol_pubkey, pool_mint_lp_usdc_pubkey, pool_mint_lp_usdt_pubkey, fee_account_sol_pubkey, fee_account_usdc_pubkey, fee_account_usdt_pubkey = get_public_keys()
+  assert str(pool.key()) == pool_pubkey, "Invalid pool account."
+  assert str(pool_usdc_tkn_acc.key()) == pool_usdc_token_account_pubkey, "Invalid pool token account."
+  assert str(pool_usdt_tkn_acc.key()) == pool_usdt_token_account_pubkey, "Invalid pool token account."
+  assert str(fee_acc_usdc.key()) == fee_account_usdc_pubkey, "Invalid fee account."
 
   balances = array(pool.balance_sol,pool.balance_usdc,pool.balance_usdt)
   LP_tokens_issued = array(pool.lp_sol_tokens,pool.lp_usdc_tokens,pool.lp_usdt_tokens)
@@ -693,6 +699,12 @@ def trade_usdc_in_usdt_out(user: Signer, user_usdc_tkn_acc: TokenAccount, user_u
 
 @instruction
 def trade_usdt_in_usdc_out(user: Signer, user_usdc_tkn_acc: TokenAccount, user_usdt_tkn_acc: TokenAccount, pool: oamm, pool_usdc_tkn_acc: TokenAccount, pool_usdt_tkn_acc: TokenAccount, amount_usdt_in: f64, amount_usdc_out: f64, fee_acc_usdt: TokenAccount, price_account_sol: PriceAccount, price_account_usdc: PriceAccount, price_account_usdt: PriceAccount):
+  # We check accounts and mints.
+  owner_pubkey, mint_usdc_pubkey, mint_usdt_pubkey, pool_pubkey, pool_usdc_token_account_pubkey, pool_usdt_token_account_pubkey, pool_mint_lp_sol_pubkey, pool_mint_lp_usdc_pubkey, pool_mint_lp_usdt_pubkey, fee_account_sol_pubkey, fee_account_usdc_pubkey, fee_account_usdt_pubkey = get_public_keys()
+  assert str(pool.key()) == pool_pubkey, "Invalid pool account."
+  assert str(pool_usdc_tkn_acc.key()) == pool_usdc_token_account_pubkey, "Invalid pool token account."
+  assert str(pool_usdt_tkn_acc.key()) == pool_usdt_token_account_pubkey, "Invalid pool token account."
+  assert str(fee_acc_usdt.key()) == fee_account_usdt_pubkey, "Invalid fee account."
 
   balances = array(pool.balance_sol,pool.balance_usdc,pool.balance_usdt)
   LP_tokens_issued = array(pool.lp_sol_tokens,pool.lp_usdc_tokens,pool.lp_usdt_tokens)
@@ -790,14 +802,6 @@ def trade_usdt_in_usdc_out(user: Signer, user_usdc_tkn_acc: TokenAccount, user_u
     pool.balance_usdc-=amount_usdc_out
 
 
-
-@instruction
-def test_convert_to_u64(user: Signer, x: f64):
-    a=f64_to_u64_9_decimal_places(x)
-    print(f'Return: {a}')
-
-
-
 @instruction
 def pool_state(user: Signer, pool: oamm, price_account_sol: PriceAccount, price_account_usdc: PriceAccount, price_account_usdt: PriceAccount):
   print(f'Balances: {pool.balance_sol} SOL - {pool.balance_usdc} USDC - {pool.balance_usdt} USDT.')
@@ -814,6 +818,24 @@ def pool_state(user: Signer, pool: oamm, price_account_sol: PriceAccount, price_
   print(f'Imbalance ratios: {imb_ratios[0]}, {imb_ratios[1]}, {imb_ratios[2]}.')
 
 
+def retrieve_prices(price_account_sol: PriceAccount, price_account_usdc: PriceAccount, price_account_usdt: PriceAccount) -> Tuple[f64,f64,f64]:
+  price_feed = price_account_sol.validate_price_feed('devnet-SOL/USD')
+  price = price_feed.get_price()
+  x: f64 = price.num()
+  y=1.0  # test Pyth USDC price feed and when it works, uncomment the following lines (and remove this line)
+  #price_feed = price_account_usdc.validate_price_feed('devnet-USDC/USD')
+  #price = price_feed.get_price()
+  #y: f64 = price.num()
+  price_feed = price_account_usdt.validate_price_feed('devnet-USDT/USD')
+  price = price_feed.get_price()
+  z: f64 = price.num()
+  print(f'The current prices are: {x}, {y}, {z}.')
+  return x,y,z
+
+
+# The following instructions are for testing purposes only.
+
+
 @instruction
 def update_pool_state(user: Signer, pool: oamm, sol_update: f64, usdc_update: f64, usdt_update: f64, lp_sol_update: f64, lp_usdc_update: f64, lp_usdt_update: f64):
     assert str(user.key()) == 'DzgBxedPKCuWbK4a4P9Bj4nNdayVzZEqc7n6YZ1A4sLa', "You are not allowed to call this instruction."
@@ -824,19 +846,58 @@ def update_pool_state(user: Signer, pool: oamm, sol_update: f64, usdc_update: f6
     pool.lp_usdc_tokens+=lp_usdc_update
     pool.lp_usdt_tokens+=lp_usdt_update
 
-def retrieve_prices(price_account_sol: PriceAccount, price_account_usdc: PriceAccount, price_account_usdt: PriceAccount) -> Tuple[f64,f64,f64]:
-  price_feed = price_account_sol.validate_price_feed('devnet-SOL/USD')
-  price = price_feed.get_price()
-  x: f64 = price.num()
-  #price_feed = price_account_usdc.validate_price_feed('devnet-USDC/USD')
-  #price = price_feed.get_price()
-  #y: f64 = price.num()
-  y=1.0
-  price_feed = price_account_usdt.validate_price_feed('devnet-USDT/USD')
-  price = price_feed.get_price()
-  z: f64 = price.num()
-  print(f'The current prices are: {x}, {y}, {z}.')
-  return x,y,z
+@instruction
+def test(signer: Signer, balancesol: f64, balanceusdc: f64, balanceusdt: f64, pricesol: f64 , priceusdc: f64, priceusdt: f64, lptoksol: f64,lptokusdc: f64,lptokusdt: f64, basefee: f64, protocolfee: f64, baseleverage: f64, delta: f64, i: u8, o: u8, amount: f64,inout: str):
+    balancearray=array(balancesol,balanceusdc,balanceusdt)
+    balancearray2=array(balancesol,balanceusdc,balanceusdt)
+    balancearray3=array(balancesol,balanceusdc,balanceusdt)
+    pricearray=array(pricesol,priceusdc,priceusdt)
+    pricearray2=array(pricesol,priceusdc,priceusdt)
+    pricearray3=array(pricesol,priceusdc,priceusdt)
+    lptokenarray=array(lptoksol,lptokusdc,lptokusdt)
+    lptokenarray2=array(lptoksol,lptokusdc,lptokusdt)
+    lptokenarray3=array(lptoksol,lptokusdc,lptokusdt)
+    W=weights(balancearray,pricearray)
+    I=imbalance_ratios(balancearray2,lptokenarray2,pricearray2)
+    scaled_fee,scaled_leverage=scaled_fee_and_leverage(balancearray3,lptokenarray3,pricearray3,basefee,baseleverage,0,1)
+    print(f'Weights: {W[0]}, {W[1]}, {W[2]}.')
+    print(f'Imbalance ratios: {I[0]}, {I[1]}, {I[2]}.')
+    print(f'Scaled fee: {scaled_fee} - Scaled leverage: {scaled_leverage}')
+    # Trade
+    if inout=='in':
+        balancearray4=array(balancesol,balanceusdc,balanceusdt)
+        lptokenarray4=array(lptoksol,lptokusdc,lptokusdt)
+        pricearray4=array(pricesol,priceusdc,priceusdt)
+        ao,pr_fee,execute_trade=trade_i(i,o,amount, balancearray4,lptokenarray4,pricearray4,basefee,protocolfee,baseleverage,delta)
+        print(f'ao: {ao} - pr fee: {pr_fee} - Execute trade: {execute_trade}')
+    if inout=='out':
+        balancearray4=array(balancesol,balanceusdc,balanceusdt)
+        lptokenarray4=array(lptoksol,lptokusdc,lptokusdt)
+        pricearray4=array(pricesol,priceusdc,priceusdt)
+        ai,pr_fee,execute_trade=trade_o(i,o,amount, balancearray4,lptokenarray4,pricearray4,basefee,protocolfee,baseleverage,delta)
+        print(f'ai: {ai} - pr fee: {pr_fee} - Execute trade: {execute_trade}')
+    if inout=='dep':
+        balancearray4=array(balancesol,balanceusdc,balanceusdt)
+        lptokenarray4=array(lptoksol,lptokusdc,lptokusdt)
+        pricearray4=array(pricesol,priceusdc,priceusdt)
+        lpt,i1=single_asset_deposit(i,amount, balancearray4,lptokenarray4,pricearray4)
+        print(f'Deposit: amount: {amount} - token: {i1} - LP tokens: {lpt}')
+    if inout=='with':
+        balancearray4=array(balancesol,balanceusdc,balanceusdt)
+        lptokenarray4=array(lptoksol,lptokusdc,lptokusdt)
+        pricearray4=array(pricesol,priceusdc,priceusdt)
+        amount_sol_out,amount_usdc_out,amount_usdt_out,ao,a_remaining=single_asset_withdrawal(o, amount, balancearray4,lptokenarray4,pricearray4,delta)
+        if o==0:
+          print(f'Withdrawal: User redeems {amount} LPSOL tokens.')
+          print(f'User receives {ao-a_remaining} SOL (in value). There are {a_remaining} SOL remaining to give to the user.')
+        if o==1:
+          print(f'Withdrawal: User redeems {amount} LPUSDC tokens.')
+          print(f'User receives {ao-a_remaining} USDC (in value). There are {a_remaining} USDC remaining to give to the user.')
+        if o==2:
+          print(f'Withdrawal: User redeems {amount} LPUSDT tokens.')
+          print(f'User receives {ao-a_remaining} USDT (in value). There are {a_remaining} USDT remaining to give to the user.')
+        print(f'User receives {amount_sol_out} SOL, {amount_usdc_out} USDC and {amount_usdt_out} USDT.')
+
 
 @instruction
 def test_prices(price_account_sol: PriceAccount, price_account_usdc: PriceAccount, price_account_usdt: PriceAccount):
@@ -864,3 +925,8 @@ def test_USDC_price(price_account_usdc: PriceAccount):
   print('2')
   x: f64 = price.num()
   print(x)
+
+@instruction
+def test_convert_to_u64(user: Signer, x: f64):
+    a=f64_to_u64_9_decimal_places(x)
+    print(f'Return: {a}')
