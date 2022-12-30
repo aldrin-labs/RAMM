@@ -1,1 +1,0 @@
-Tezos OAMM version
