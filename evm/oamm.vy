@@ -32,6 +32,7 @@ BASE_FEE: constant(decimal) = 0.0008 # 0.08%
 BASE_LEVERAGE: constant(decimal) = 100.0
 PROTOCOL_FEE: constant(decimal) = 0.5 # 50% of collected BASE_FEEs go to the protocol
 DELTA: constant(decimal) = 0.25 # maximum permitted deviation of the imbalance ratios from 1.0
+MINIMUM_TRADE_AMOUNTS: constant(decimal[N]) = [0.01,1.0,1.0] # Initial minimum amounts for trades
 
 ## Conversion rates according to number of decimals of each token
 
@@ -54,9 +55,9 @@ owner: public(address)
 assets: public(address[N])
 lptokens: public(LPToken[N])
 price_feeds: AggregatorV3Interface[N]
-contract_address: public(address)
 fee_address: address
 deposits_enabled: public(bool[N])
+minimum_trade_amounts: public(decimal[N])
 
 # Events
 
@@ -111,6 +112,7 @@ struct TradeOutput:
     amount: decimal
     protocol_fee: decimal
     execute_trade: bool
+    message: String[100]
 
 struct WithdrawalOutput:
     amounts: decimal[N]
@@ -133,6 +135,7 @@ def __init__(_owner: address, assetslist: address[N], lptokenslist: address[N], 
     self.lp_tokens_issued = LIST_OF_ZEROES
     self.fee_address = fee_collector
     self.deposits_enabled = LIST_OF_TRUE
+    self.minimum_trade_amounts = MINIMUM_TRADE_AMOUNTS
 
 @external
 def set_owner(_owner: address):
@@ -159,12 +162,11 @@ def set_new_price_feed(i: uint8, price_feed_address: address):
     assert msg.sender == self.owner, "You do not have permission to set a new price feed."
     self.price_feeds[i] = AggregatorV3Interface(price_feed_address)
 
-
 @external
-def set_contract_address(_contract_address: address):
-    assert msg.sender == self.owner, "You are not the pool owner."
-    self.contract_address = _contract_address
-
+def set_new_minimum_trade_amount(i: uint8, amount: decimal):
+    assert msg.sender == self.owner, "You do not have permission to set new minimum trade amounts."
+    assert amount >= 0.0, "The minimum trading amount must be non-negative."
+    self.minimum_trade_amounts[i] = amount
 
 
 #@external
@@ -364,6 +366,16 @@ def check_imbalance_ratios(balances: decimal[N], lp_tokens_issued: decimal[N], p
 
 @internal
 @view
+def check_imbalance_ratios_message(execute: bool) -> String[100]:
+    if execute == True:
+        return "Trade executed."
+    else:
+        return "The trade was not executed because of pool imbalance."
+
+
+
+@internal
+@view
 def funct_adjust_leverage_parameter(x: decimal) -> decimal:
     """Base function that adjusts the leverage parameter."""
     return x*x*x
@@ -397,10 +409,10 @@ def trade_i(i: uint8, o: uint8, ai: decimal, balances: decimal[N], lp_tokens_iss
     # We check some conditions first.
     if lp_tokens_issued[i]==0.0:
         # In this case the trade is not allowed because there are no LP tokens of type i in circulation.
-        return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False})
+        return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False, message: "The trade is not allowed because there are no LP tokens of the in-token type in circulation."})
     if balances[o]==0.0:
         # In this case the trade can not be performed because there is no token o in the pool.")
-        return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False})
+        return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False, message: "The trade is not possible because there is currently no out-token left in the pool."})
     # First we compute the weights.
     W: decimal[N] = self.weights(balances, prices)
     # We divide into different cases.
@@ -408,7 +420,8 @@ def trade_i(i: uint8, o: uint8, ai: decimal, balances: decimal[N], lp_tokens_iss
         ao: decimal = (1.0-BASE_FEE)*ai*prices[i]/prices[o]
         pr_fee: decimal = PROTOCOL_FEE*BASE_FEE*ai
         execute: bool = self.check_imbalance_ratios(balances, lp_tokens_issued, prices,i,o,ai,ao,pr_fee)
-        return TradeOutput({amount: ao, protocol_fee: pr_fee, execute_trade: execute})
+        _message: String[100] = self.check_imbalance_ratios_message(execute)
+        return TradeOutput({amount: ao, protocol_fee: pr_fee, execute_trade: execute, message: _message})
     if lp_tokens_issued[o]==0.0 and balances[i]!=0.0: # Self.balances[i]!=0 is not needed here, but added anyway just in case
         leverage: decimal = BASE_LEVERAGE
         trading_fee: decimal = BASE_FEE
@@ -419,13 +432,14 @@ def trade_i(i: uint8, o: uint8, ai: decimal, balances: decimal[N], lp_tokens_iss
         ao: decimal = bo*(1.0-self.power(bi/(bi+(1.0-BASE_FEE)*ai),wi/wo))
         pr_fee: decimal = PROTOCOL_FEE*BASE_FEE*ai
         execute: bool = self.check_imbalance_ratios(balances, lp_tokens_issued, prices,i,o,ai,ao,pr_fee)
-        return TradeOutput({amount: ao, protocol_fee: pr_fee, execute_trade: execute})
+        _message: String[100] = self.check_imbalance_ratios_message(execute)
+        return TradeOutput({amount: ao, protocol_fee: pr_fee, execute_trade: execute, message: _message})
     if lp_tokens_issued[o]!=0.0 and balances[i]!=0.0: # Self.balances[i]!=0 is not needed here, but added anyway just in case
         # We check imbalance ratio of token o.
         imb_ratios_initial_o: decimal = self.imbalance_ratios(balances, lp_tokens_issued, prices)[o]
         if imb_ratios_initial_o<1.0-DELTA:
             # In this case the trade is not performed because the imbalance ratio of token o is too low.
-            return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False})
+            return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False, message: "The trade was not executed because the imbalance ratio of the out-token is too low."})
         # Now we update the fee and the leverage parameter.
         FeeLev: decimal[2] = self.scaled_fee_and_leverage(balances, lp_tokens_issued, prices,i,o)
         trading_fee: decimal = FeeLev[0]
@@ -446,10 +460,11 @@ def trade_i(i: uint8, o: uint8, ai: decimal, balances: decimal[N], lp_tokens_iss
         # Now we check if there is enough balance of token o.
         if ao>=balances[o]:
             # In this case the trade is not executed because there is not enough balance of token o.
-            return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False})
+            return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False, message: "The trade was not executed because there is not enough balance of the out-token."})
         execute: bool = self.check_imbalance_ratios(balances, lp_tokens_issued, prices,i,o,ai,ao, pr_fee)
-        return TradeOutput({amount: ao, protocol_fee:pr_fee, execute_trade: execute})
-    return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False})
+        _message: String[100] = self.check_imbalance_ratios_message(execute)
+        return TradeOutput({amount: ao, protocol_fee:pr_fee, execute_trade: execute, message: _message})
+    return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False, message: "The trade was not executed."})
 
 @internal
 @view
@@ -459,17 +474,15 @@ def trade_o(i: uint8,o: uint8,ao: decimal, balances: decimal[N], lp_tokens_issue
     and token i goes into the pool. Returns the amount ai of token i that goes
     into the pool, the base fee that is charged, and a boolean that indicates if the trade has to be executed or not.
     """
-    if ao<=0.0:
-        # The amount ao must be a positive number.
-        return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False})
+
     # We check conditions first.
     if lp_tokens_issued[i]==0.0:
         # In this case the trade is not allowed because there are no LP tokens of type i in circulation.
-        return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False})
+        return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False, message: "The trade is not allowed because there are no LP tokens of the in-token type in circulation."})
     if ao>balances[o] or (ao == balances[o] and lp_tokens_issued[o] != 0.0):
         # We check if there is enough balance of token o.
         # This also prevents the balance of token o from being zero if there are still LP tokens of type o in circulation.
-        return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False})
+        return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False, message: "The trade was not executed because there is not enough balance of the out-token."})
     # First we compute the weights.
     W: decimal[N] = self.weights(balances, prices)
     # Now we divide into different cases.
@@ -477,7 +490,8 @@ def trade_o(i: uint8,o: uint8,ao: decimal, balances: decimal[N], lp_tokens_issue
         ai: decimal = ao*prices[o]/prices[i]/(1.0-BASE_FEE)
         pr_fee: decimal = PROTOCOL_FEE*BASE_FEE*ai
         execute: bool = self.check_imbalance_ratios(balances, lp_tokens_issued, prices,i,o,ai,ao,pr_fee)
-        return TradeOutput({amount: ai, protocol_fee: pr_fee, execute_trade: execute})
+        _message: String[100] = self.check_imbalance_ratios_message(execute)
+        return TradeOutput({amount: ai, protocol_fee: pr_fee, execute_trade: execute, message: _message})
     if lp_tokens_issued[o]==0.0 and balances[i]!=0.0: # Self.balances[i]!=0 is not needed here, but added anyway just in case
         leverage: decimal = BASE_LEVERAGE
         bi: decimal = balances[i]*leverage
@@ -487,14 +501,15 @@ def trade_o(i: uint8,o: uint8,ao: decimal, balances: decimal[N], lp_tokens_issue
         ai: decimal = bi/(1.0-BASE_FEE)*(self.power(bo/(bo-ao),wo/wi)-1.0)
         pr_fee: decimal = PROTOCOL_FEE*BASE_FEE*ai
         execute: bool = self.check_imbalance_ratios(balances, lp_tokens_issued, prices,i,o,ai,ao,pr_fee)
-        return TradeOutput({amount: ai, protocol_fee: pr_fee, execute_trade: execute})
+        _message: String[100] = self.check_imbalance_ratios_message(execute)
+        return TradeOutput({amount: ai, protocol_fee: pr_fee, execute_trade: execute, message: _message})
 
     if lp_tokens_issued[o]!=0.0 and balances[i]!=0.0: # Self.balances[i]!=0 is not needed here, but added anyway just in case
         # We check the imbalance ratio of token o.
         imb_ratios_initial: decimal[N] = self.imbalance_ratios(balances, lp_tokens_issued, prices)
         if imb_ratios_initial[o]<1.0-DELTA:
             # In this case we do not execute the trade because the imbalance ratio of token o is too low.')
-            return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False})
+            return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False, message: "The trade was not executed because the imbalance ratio of the out-token is too low."})
 
         # Now we update the fee and the leverage parameter.
         FeeLev: decimal[2] = self.scaled_fee_and_leverage(balances, lp_tokens_issued, prices,i,o)
@@ -509,8 +524,9 @@ def trade_o(i: uint8,o: uint8,ao: decimal, balances: decimal[N], lp_tokens_issue
         pr_fee: decimal = PROTOCOL_FEE*trading_fee*ai
         # We check the imbalance ratios
         execute: bool = self.check_imbalance_ratios(balances, lp_tokens_issued, prices,i,o,ai,ao,pr_fee)
-        return TradeOutput({amount: ai, protocol_fee: pr_fee, execute_trade: execute})
-    return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False})
+        _message: String[100] = self.check_imbalance_ratios_message(execute)
+        return TradeOutput({amount: ai, protocol_fee: pr_fee, execute_trade: execute, message: _message})
+    return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False, message: "The trade was not executed."})
 
 @internal
 @view
@@ -662,36 +678,44 @@ def pool_state(prices: decimal[N]):
 
 @external
 def trade_amount_in(i: uint8, o: uint8, ai: decimal):
+    assert ai >= 0.0, "The trading amount must be non-negative."
+    assert ai >= self.minimum_trade_amounts[i], "The trading amount is too small."
+    # We take the market prices from the oracle
     prices: decimal[N] = LIST_OF_ZEROES
     for j in range(N):
         price_j_int256: int256 = self.get_latest_price(j)
         prices[j] = self.price_to_decimal(price_j_int256)
+    # Now we compute the parameters of the trade
     trade: TradeOutput = self.trade_i(i, o, ai, self.balances, self.lp_tokens_issued, prices)
     if trade.execute_trade:
         input_asset: address = self.assets[i]
         amount_in: uint256 = self.decimal_to_uint_assets(ai, i)
         amount_fee: uint256 = self.decimal_to_uint_assets(trade.protocol_fee, i)
-        Token(input_asset).transferFrom(msg.sender,self.contract_address,amount_in)
+        Token(input_asset).transferFrom(msg.sender,self,amount_in)
         Token(input_asset).transfer(self.fee_address,amount_fee)
         # For the final version we will need to call ERC20 perhaps instead of Token, as in the line below, which serves as an example.
         # Check this.
-        #ERC20(input_asset).transferFrom(msg.sender,self.contract_address,amount_in)
+        #ERC20(input_asset).transferFrom(msg.sender,self,amount_in)
         output_asset: address = self.assets[o]
         amount_out: uint256 = self.decimal_to_uint_assets(trade.amount, o)
-        #ERC20(output_asset).transferFrom(self.contract_address,msg.sender,amount_out)
+        #ERC20(output_asset).transferFrom(self,msg.sender,amount_out)
         Token(output_asset).transfer(msg.sender,amount_out)
         self.balances[i]+=ai-trade.protocol_fee
         self.balances[o]-=trade.amount
         log Log_trade_output(ai,trade.amount,trade.protocol_fee,trade.execute_trade)
     else:
-        log Log_msg("Trade not executed.")
+        log Log_msg(trade.message)
 
 @external
 def trade_amount_out(i: uint8, o: uint8, ao: decimal):
+    assert ao >= 0.0, "The trading amount must be non-negative."
+    assert ao >= self.minimum_trade_amounts[o], "The trading amount is too small."
+    # We take the market prices from the oracle
     prices: decimal[N] = LIST_OF_ZEROES
     for j in range(N):
         price_j_int256: int256 = self.get_latest_price(j)
         prices[j] = self.price_to_decimal(price_j_int256)
+    # Now we compute the parameters of the trade
     trade: TradeOutput = self.trade_o(i, o, ao, self.balances, self.lp_tokens_issued, prices)
     if trade.execute_trade:
         ai: decimal = trade.amount-trade.protocol_fee
@@ -700,18 +724,18 @@ def trade_amount_out(i: uint8, o: uint8, ao: decimal):
         amount_fee: uint256 = self.decimal_to_uint_assets(trade.protocol_fee, i)
         # For the final version we will need to call ERC20 perhaps instead of Token, as in the line below, which serves as an example.
         # Check this.
-        #ERC20(input_asset).transferFrom(msg.sender,self.contract_address,amount_in)
-        Token(input_asset).transferFrom(msg.sender,self.contract_address,amount_in)
+        #ERC20(input_asset).transferFrom(msg.sender,self,amount_in)
+        Token(input_asset).transferFrom(msg.sender,self,amount_in)
         Token(input_asset).transfer(self.fee_address,amount_fee)
         output_asset: address = self.assets[o]
         amount_out: uint256 = self.decimal_to_uint_assets(ao, o)
-        #ERC20(output_asset).transferFrom(self.contract_address,msg.sender,amount_out)
+        #ERC20(output_asset).transferFrom(self,msg.sender,amount_out)
         Token(output_asset).transfer(msg.sender,amount_out)
         self.balances[i]+=ai
         self.balances[o]-=ao
         log Log_trade_output(trade.amount,ao,trade.protocol_fee,trade.execute_trade)
     else:
-        log Log_msg("Trade not executed.")
+        log Log_msg(trade.message)
 
 @external
 def liquidity_deposit(i: uint8, ai: decimal):
@@ -730,8 +754,8 @@ def liquidity_deposit(i: uint8, ai: decimal):
         amount_in: uint256 = self.decimal_to_uint_assets(ai, i)
         # For the final version we will need to call ERC20 instead of Token, as in the line below, which serves as an example.
         # Check this.
-        Token(input_asset).transferFrom(msg.sender,self.contract_address,amount_in)
-        #ERC20(input_asset).transferFrom(msg.sender,self.contract_address,amount_in)
+        Token(input_asset).transferFrom(msg.sender,self,amount_in)
+        #ERC20(input_asset).transferFrom(msg.sender,self,amount_in)
         self.balances[i]+=ai
         # mint corresponding LP token
         lptok: LPToken = self.lptokens[i]
