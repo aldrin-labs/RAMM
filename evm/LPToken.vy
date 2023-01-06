@@ -1,4 +1,4 @@
-# @version ^0.2.0
+# @version ^0.3.0
 
 """
 @title Bare-bones Token implementation
@@ -120,7 +120,7 @@ def transferFrom(_from : address, _to : address, _value : uint256) -> bool:
     @param _value The amount of tokens to be transferred
     @return Success boolean
     """
-    assert self.allowances[_from][msg.sender] >= _value, "Insufficient allowance"
+    assert self.allowances[_from][msg.sender] >= _value, "Insufficient allowance."
     self.allowances[_from][msg.sender] -= _value
     self._transfer(_from, _to, _value)
     return True
@@ -134,7 +134,7 @@ def mint(_to: address, _value: uint256) -> bool:
     @param _to The account that will receive the created tokens.
     @param _value The amount that will be created.
     """
-    assert msg.sender == self.minter, "You do not have permission to call this function."
+    assert msg.sender == self.minter, "You do not have permission to mint tokens."
 
     self.totalSupply += _value
     self.balances[_to] += _value
@@ -150,7 +150,7 @@ def burnFrom(_to: address, _value: uint256) -> bool:
     @param _to The account whose tokens will be burned.
     @param _value The amount that will be burned.
     """
-    assert msg.sender == self.minter
+    assert msg.sender == self.minter, "You do not have permission to burn tokens."
 
     self.totalSupply -= _value
     self.balances[_to] -= _value
@@ -163,12 +163,12 @@ def burnFrom(_to: address, _value: uint256) -> bool:
 def set_minter(_minter: address):
     # the following line needs to be uncommented for security reasons
     # it has been commented for testing purposes only
-    # assert msg.sender == self.minter, "Wrong minter."
+    assert msg.sender == self.minter, "You do not have permission to set a new minter."
     self.minter = _minter
 
 
 @external
 def set_name(_name: String[64], _symbol: String[32]):
-    assert msg.sender == self.minter
+    assert msg.sender == self.minter, "You do not have permission to change the token name and its symbol."
     self.name = _name
     self.symbol = _symbol
