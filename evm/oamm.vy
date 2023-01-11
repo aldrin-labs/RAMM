@@ -214,7 +214,7 @@ def abs_dec(x: decimal) -> decimal:
 def pow_n(x: decimal, n: int256) -> decimal:
     """Computes x^n, where n is a non-negative integer."""
     assert n>=0, "The parameter n must be a positive integer."
-    log Log_uint_value("n",convert(n,uint256)) # ***
+    #log Log_uint_value("n",convert(n,uint256)) # ***
     assert n<=127, "The parameter n is too big."
     m: int256 = n
     result: decimal = 1.0
@@ -411,13 +411,7 @@ def trade_i(i: uint8, o: uint8, ai: decimal, balances: decimal[N], lp_tokens_iss
     out of the pool, the base fee that is charged, a boolean that indicates if the trade has to be executed or not,
     and a message that explains why the the trade will not be executed, if that is the case.
     """
-    # We check some conditions first.
-    if lp_tokens_issued[i]==0.0:
-        # In this case the trade is not allowed because there are no LP tokens of type i in circulation.
-        return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False, message: "The trade is not allowed because there are no LP tokens of the in-token type in circulation."})
-    if balances[o]==0.0:
-        # In this case the trade can not be performed because there is no token o in the pool.")
-        return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False, message: "The trade is not possible because there is currently no out-token left in the pool."})
+
     # First we compute the weights.
     W: decimal[N] = self.weights(balances, prices)
     # We divide into different cases.
@@ -434,7 +428,7 @@ def trade_i(i: uint8, o: uint8, ai: decimal, balances: decimal[N], lp_tokens_iss
         wi: decimal = W[i]
         bo: decimal = balances[o]*leverage
         wo: decimal = W[o]
-        log Log_list("Weights", W) # ***
+        #log Log_list("Weights", W) # ***
         ao: decimal = bo*(1.0-self.power(bi/(bi+(1.0-BASE_FEE)*ai),wi/wo))
         pr_fee: decimal = PROTOCOL_FEE*BASE_FEE*ai
         execute: bool = self.check_imbalance_ratios(balances, lp_tokens_issued, prices,i,o,ai,ao,pr_fee)
@@ -464,7 +458,7 @@ def trade_i(i: uint8, o: uint8, ai: decimal, balances: decimal[N], lp_tokens_iss
         #log Log_value("ao:", ao)
         pr_fee: decimal = PROTOCOL_FEE*trading_fee*ai
         # Now we check if there is enough balance of token o.
-        if ao>=balances[o]:
+        if ao>balances[o] or (ao == balances[o] and lp_tokens_issued[o] != 0.0):
             # In this case the trade is not executed because there is not enough balance of token o.
             return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False, message: "The trade was not executed because there is not enough balance of the out-token."})
         execute: bool = self.check_imbalance_ratios(balances, lp_tokens_issued, prices,i,o,ai,ao, pr_fee)
@@ -481,14 +475,7 @@ def trade_o(i: uint8,o: uint8,ao: decimal, balances: decimal[N], lp_tokens_issue
     into the pool, the base fee that is charged, a boolean that indicates if the trade has to be executed or not,
     and a message that explains why the the trade will not be executed, if that is the case.
     """
-    # We check conditions first.
-    if lp_tokens_issued[i]==0.0:
-        # In this case the trade is not allowed because there are no LP tokens of type i in circulation.
-        return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False, message: "The trade is not allowed because there are no LP tokens of the in-token type in circulation."})
-    if ao>balances[o] or (ao == balances[o] and lp_tokens_issued[o] != 0.0):
-        # We check if there is enough balance of token o.
-        # This also prevents the balance of token o from being zero if there are still LP tokens of type o in circulation.
-        return TradeOutput({amount: 0.0, protocol_fee:0.0, execute_trade: False, message: "The trade was not executed because there is not enough balance of the out-token."})
+
     # First we compute the weights.
     W: decimal[N] = self.weights(balances, prices)
     # Now we divide into different cases.
@@ -686,6 +673,8 @@ def pool_state(prices: decimal[N]):
 def trade_amount_in(i: uint8, o: uint8, ai: decimal):
     assert ai >= 0.0, "The trading amount must be non-negative."
     assert ai >= self.minimum_trade_amounts[i], "The trading amount is too small."
+    assert self.lp_tokens_issued[i] > 0.0, "The trade is not allowed because there are no LP tokens of the in-token type in circulation."
+    assert self.balances[o] > 0.0, "The trade is not possible because there is currently no out-token left in the pool."
     # We take the market prices from the oracle
     prices: decimal[N] = LIST_OF_ZEROES
     for j in range(N):
@@ -694,6 +683,11 @@ def trade_amount_in(i: uint8, o: uint8, ai: decimal):
     # Now we compute the parameters of the trade
     trade: TradeOutput = self.trade_i(i, o, ai, self.balances, self.lp_tokens_issued, prices)
     if trade.execute_trade:
+        # The following lines are not needed because this check is already performed in the self.trade_i function.
+        #ao = trade.amount
+        #assert ao<=self.balances[o], "The trade was not executed because there is not enough balance of the out-token."
+        #if ao == self.balances[o]:
+            #assert self.lp_tokens_issued[o] = 0.0, "The trade was not executed because there is not enough balance of the out-token."
         input_asset: address = self.assets[i]
         amount_in: uint256 = self.decimal_to_uint_assets(ai, i)
         amount_fee: uint256 = self.decimal_to_uint_assets(trade.protocol_fee, i)
@@ -712,10 +706,16 @@ def trade_amount_in(i: uint8, o: uint8, ai: decimal):
     else:
         log Log_msg(trade.message)
 
+
 @external
 def trade_amount_out(i: uint8, o: uint8, ao: decimal):
+    # First we perform some simple checks.
     assert ao >= 0.0, "The trading amount must be non-negative."
     assert ao >= self.minimum_trade_amounts[o], "The trading amount is too small."
+    assert self.lp_tokens_issued[i] > 0.0, "The trade is not allowed because there are no LP tokens of the in-token type in circulation."
+    assert ao<=self.balances[o], "The trade was not executed because there is not enough balance of the out-token."
+    if ao == self.balances[o]:
+        assert self.lp_tokens_issued[o] == 0.0, "The trade was not executed because there is not enough balance of the out-token."
     # We take the market prices from the oracle
     prices: decimal[N] = LIST_OF_ZEROES
     for j in range(N):
@@ -782,7 +782,9 @@ def liquidity_withdrawal(o: uint8, lpt: decimal):
         prices[j] = self.price_to_decimal(price_j_int256)
     out: WithdrawalOutput = self.single_asset_withdrawal(o, lpt, self.balances, self.lp_tokens_issued, prices)
     # burn corresponding amount of lp tokens
-    lpt_amount: decimal = lpt*(out.value-out.remaining)/out.value
+    lpt_amount: decimal = lpt
+    if out.remaining > 0.0:
+        lpt_amount = lpt*(out.value-out.remaining)/out.value
     burn_amount: uint256 = self.decimal_to_uint_lptokens(lpt_amount)
     lptok.burnFrom(msg.sender,burn_amount)
     self.lp_tokens_issued[o]-=lpt_amount
