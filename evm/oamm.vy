@@ -4,11 +4,13 @@ from vyper.interfaces import ERC20
 
 
 interface Token:
+    def balanceOf(_owner: address) -> uint256: view
     def transferFrom(_from : address, _to : address, _value : uint256) -> bool: nonpayable
     def transfer(_to : address, _value : uint256) -> bool: nonpayable
 
 interface LPToken:
     def totalSupply() -> uint256: view
+    def balanceOf(_owner: address) -> uint256: view
     def mint(_to: address, _value: uint256) -> bool: nonpayable
     def burnFrom(_to: address, _value: uint256) -> bool: nonpayable
     def transferFrom(_from : address, _to : address, _value : uint256) -> bool: nonpayable
@@ -40,7 +42,7 @@ LPTOKENS_DECIMALS: constant(uint8) = 10
 RATE_6_DECIMALS: constant(decimal) = 1000000.0   #
 RATE_10_DECIMALS: constant(decimal) = 10000000000.0   # 10**LPTOKENS_DECIMALS
 LPTOKENS_FACTOR: constant(decimal) = RATE_10_DECIMALS  # 10**LPTOKENS_DECIMALS
-CONVERSION_RATES: constant(decimal[N]) = [RATE_10_DECIMALS, RATE_6_DECIMALS, RATE_6_DECIMALS]
+CONVERSION_RATES: constant(decimal[N]) = [RATE_10_DECIMALS, RATE_10_DECIMALS, RATE_10_DECIMALS]
 
 ## Other constants
 LIST_OF_ZEROES: constant(decimal[N]) = [0.0,0.0,0.0] # modify according to the value of N
@@ -212,18 +214,20 @@ def abs_dec(x: decimal) -> decimal:
 def pow_n(x: decimal, n: int256) -> decimal:
     """Computes x^n, where n is a non-negative integer."""
     assert n>=0, "The parameter n must be a positive integer."
-    assert n<=20, "The parameter n is too big."
+    log Log_uint_value("n",convert(n,uint256)) # ***
+    assert n<=127, "The parameter n is too big."
     m: int256 = n
     result: decimal = 1.0
     a: decimal = x
     #while m!=0:  # while is not supported in Vyper
-    # We can find an upper bound for n (should be n<=20)
+    # We can find an upper bound for n (should be n<=100 if the weights are between 0.01 and 1. )
     # and then hard code number_of loops as
     # number_of_loops = floor(log_2(n))+1 .
-    # For example, if the upper bound for n is 20, a number of loops equal to 5 should work.
+    # For example, if the upper bound for n is 127, a number of loops equal to 7 works,
+    # since we need 7 digits to write n in base 2.
     #number_of_loops: int256 = n
     #for j in range(number_of_loops):
-    for j in range(5):
+    for j in range(7):
         if m%2 == 1:
             result=result*a
         a=a*a
@@ -231,6 +235,7 @@ def pow_n(x: decimal, n: int256) -> decimal:
         m=floor(m_dec/2.0) #m=m//2
         if m==0:
             return result
+    # We can throw an error message here, since the result must be reached within the for loop.
     return result
 
 
@@ -239,7 +244,7 @@ def pow_n(x: decimal, n: int256) -> decimal:
 def pow_d(x: decimal, a: decimal) -> decimal:
     """Computes x^a, where a is a real number between 0 and 1."""
     # We will use a Taylor series. The taylor series converges for x in (0,2).
-    # If the leverage parameter k is greater 11 then in the formula of Ai employs exponentiation
+    # If the leverage parameter k is greater than 11 then the formula of Ai employs exponentiation
     # with 1<x<1.1 .
     # On the other hand, in the formula for Ao, we employ exponentiation with 0<x<1.
     # In addition, if Ai<kBi/2 then we use an x with 1/2<x<1.
@@ -248,13 +253,15 @@ def pow_d(x: decimal, a: decimal) -> decimal:
     # **** compute necessary number of iterations to obtain the desired precision.
     # **** write mathematical explanation with proofs.
 
+    assert (0.6666666666<=x and x<=1.5), "The base of the exponentiation is out of the desired bounds."
 
-    if x<0.0 or x>2.0:
-        #print("Invalid parameter x")
-        return 0.0
-    if x<0.6666666666 or x>1.5:
-        #print("The parameter x given could give a result with bad precision. Try with x in [2/3,1.5].")
-        return 0.0
+    #if x<0.0 or x>2.0:
+        ##print("Invalid parameter x")
+        #return 0.0
+    #if x<0.6666666666 or x>1.5:
+        ##print("The parameter x given could give a result with bad precision. Try with x in [2/3,1.5].")
+        #return 0.0
+
     result: decimal = 1.0 # first partial sum of the series
     n: decimal = 0.0
     tn: decimal = 1.0 # n-th term (for n=0 here)
@@ -301,10 +308,7 @@ def decimal_to_uint_assets(x: decimal, i: uint8) -> uint256:
 def price_to_decimal(x: int256) -> decimal:
     if x>=0:
         return convert(x,decimal)/100000000.0
-        #return convert(floor(x*LPTOKENS_FACTOR),uint256)
     return 0.0
-
-
 
 
 ###### Functions ######
@@ -312,7 +316,7 @@ def price_to_decimal(x: int256) -> decimal:
 @internal
 @view
 def weights(balances: decimal[N], prices: decimal[N]) -> decimal[N]:
-    """Returns a list with the weights of the tokens with respect to the current prices."""
+    """Returns a list with the weights of the tokens with respect to the given prices."""
     B: decimal = 0.0
     W: decimal[N] = LIST_OF_ZEROES
     for j in range(N):
@@ -324,7 +328,7 @@ def weights(balances: decimal[N], prices: decimal[N]) -> decimal[N]:
 @internal
 @view
 def compute_B_and_L(balances: decimal[N], lp_tokens_issued: decimal[N], prices: decimal[N]) -> decimal[2]:
-    """Returns a list with the values of B and L"""
+    """Returns a list with the values of B and L."""
     B: decimal = 0.0
     L: decimal = 0.0
     for j in range(N):
@@ -402,9 +406,10 @@ def scaled_fee_and_leverage(balances: decimal[N], lp_tokens_issued: decimal[N], 
 @view
 def trade_i(i: uint8, o: uint8, ai: decimal, balances: decimal[N], lp_tokens_issued: decimal[N], prices: decimal[N]) -> TradeOutput :
     """
-    Performs a trade where an amount ai of token i goes into the pool
+    Computes the paramters of a trade where an amount ai of token i goes into the pool
     and token o goes out of the pool. Returns the amount ao of token o that goes
-    out of the pool, the base fee that is charged, and a boolean that indicates if the trade has to be executed or not.
+    out of the pool, the base fee that is charged, a boolean that indicates if the trade has to be executed or not,
+    and a message that explains why the the trade will not be executed, if that is the case.
     """
     # We check some conditions first.
     if lp_tokens_issued[i]==0.0:
@@ -429,6 +434,7 @@ def trade_i(i: uint8, o: uint8, ai: decimal, balances: decimal[N], lp_tokens_iss
         wi: decimal = W[i]
         bo: decimal = balances[o]*leverage
         wo: decimal = W[o]
+        log Log_list("Weights", W) # ***
         ao: decimal = bo*(1.0-self.power(bi/(bi+(1.0-BASE_FEE)*ai),wi/wo))
         pr_fee: decimal = PROTOCOL_FEE*BASE_FEE*ai
         execute: bool = self.check_imbalance_ratios(balances, lp_tokens_issued, prices,i,o,ai,ao,pr_fee)
@@ -470,11 +476,11 @@ def trade_i(i: uint8, o: uint8, ai: decimal, balances: decimal[N], lp_tokens_iss
 @view
 def trade_o(i: uint8,o: uint8,ao: decimal, balances: decimal[N], lp_tokens_issued: decimal[N], prices: decimal[N]) -> TradeOutput :
     """
-    Performs a trade where an amount ao of token o goes out of the pool
+    Computes the parameters of a trade where an amount ao of token o goes out of the pool
     and token i goes into the pool. Returns the amount ai of token i that goes
-    into the pool, the base fee that is charged, and a boolean that indicates if the trade has to be executed or not.
+    into the pool, the base fee that is charged, a boolean that indicates if the trade has to be executed or not,
+    and a message that explains why the the trade will not be executed, if that is the case.
     """
-
     # We check conditions first.
     if lp_tokens_issued[i]==0.0:
         # In this case the trade is not allowed because there are no LP tokens of type i in circulation.
@@ -739,18 +745,20 @@ def trade_amount_out(i: uint8, o: uint8, ao: decimal):
 
 @external
 def liquidity_deposit(i: uint8, ai: decimal):
+    input_asset: address = self.assets[i]
+    assert self.deposits_enabled[i] == True, "Deposits of this asset are temporarily disabled."
+    assert ai > 0.0, "The amount to deposit must be a positive number."
+    assert Token(input_asset).balanceOf(msg.sender) >= self.decimal_to_uint_assets(ai,i) , "You do not have enough tokens to deposit."
     prices: decimal[N] = LIST_OF_ZEROES
     for j in range(N):
         price_j_int256: int256 = self.get_latest_price(j)
         prices[j] = self.price_to_decimal(price_j_int256)
 
-    assert self.deposits_enabled[i] == True, "Deposits of this asset are temporarily disabled."
     lpt: decimal = self.single_asset_deposit(i, ai, self.balances, self.lp_tokens_issued, prices)
     if lpt == 0.0:
         log Log_msg("Deposit not executed.")
     else:
         # transfer amount of token i
-        input_asset: address = self.assets[i]
         amount_in: uint256 = self.decimal_to_uint_assets(ai, i)
         # For the final version we will need to call ERC20 instead of Token, as in the line below, which serves as an example.
         # Check this.
@@ -766,13 +774,14 @@ def liquidity_deposit(i: uint8, ai: decimal):
 
 @external
 def liquidity_withdrawal(o: uint8, lpt: decimal):
+    lptok: LPToken = self.lptokens[o]
+    assert lptok.balanceOf(msg.sender) >= self.decimal_to_uint_lptokens(lpt) , "You do not have enough LP tokens."
     prices: decimal[N] = LIST_OF_ZEROES
     for j in range(N):
         price_j_int256: int256 = self.get_latest_price(j)
         prices[j] = self.price_to_decimal(price_j_int256)
     out: WithdrawalOutput = self.single_asset_withdrawal(o, lpt, self.balances, self.lp_tokens_issued, prices)
     # burn corresponding amount of lp tokens
-    lptok: LPToken = self.lptokens[o]
     lpt_amount: decimal = lpt*(out.value-out.remaining)/out.value
     burn_amount: uint256 = self.decimal_to_uint_lptokens(lpt_amount)
     lptok.burnFrom(msg.sender,burn_amount)
