@@ -93,14 +93,10 @@ event Log_BL:
     value2: decimal
 
 event Log_pool_state:
-    message1: String[100]
-    value1: decimal[N]
-    message2: String[100]
-    value2: decimal[N]
-    message3: String[100]
-    value3: decimal[N]
-    message4: String[100]
-    value4: decimal[N]
+    balances: decimal[N]
+    LP_tokens_issued: decimal[N]
+    imbalance_ratios: decimal[N]
+    prices_given: decimal[N]
 
 event Log_trade_output:
     amount_in: decimal
@@ -719,7 +715,7 @@ def pool_state(prices: decimal[N]):
     @param prices A list with the market prices of each asset.
     """
     Imb: decimal[N] = self.imbalance_ratios(self.balances, self.lp_tokens_issued, prices)
-    log Log_pool_state('Balances:',self.balances,'LP tokens issued:',self.lp_tokens_issued,'Imbalance ratios:',Imb,'Prices given as parameters:',prices)
+    log Log_pool_state(self.balances,self.lp_tokens_issued,Imb,prices)
 
 @external
 def trade_amount_in(i: uint8, o: uint8, ai: decimal):
