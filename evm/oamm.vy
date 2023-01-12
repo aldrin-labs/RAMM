@@ -1,4 +1,10 @@
 # @version ^0.3.0
+"""
+@title Oracle-based AMM
+@license To be determined.
+@author Miguel Ottina - DeFi Research Analyst at Aldrin Labs
+@notice An AMM that greatly reduces impermanent loss.
+"""
 
 from vyper.interfaces import ERC20
 
@@ -93,6 +99,8 @@ event Log_pool_state:
     value2: decimal[N]
     message3: String[100]
     value3: decimal[N]
+    message4: String[100]
+    value4: decimal[N]
 
 event Log_trade_output:
     amount_in: decimal
@@ -125,14 +133,23 @@ struct WithdrawalOutput:
 ######################## Pool initialization and management ########################
 
 @external
-def __init__(_owner: address, assetslist: address[N], lptokenslist: address[N], _price_feed_address: address[N], fee_collector: address):
+def __init__(_owner: address, assetslist: address[N], lptokenslist: address[N], _price_feed_addresses: address[N], fee_collector: address):
+    """
+    @notice Initializes the pool.
+    @param _owner Pool's owner's address.
+    @param assetslist List of addresses of the assets of the pool.
+    @param lptokenslist List of addresses of the lptokens of the pool.
+    @param _price_feed_addresses List of addresses of the Chainlink price feeds of the assets of the pool.
+    @param fee_collector Address that collects the fees.
+    """
     self.owner=_owner
     for j in range(N):
-        assert assetslist[j] != ZERO_ADDRESS, "Invalid asset address"
+        assert assetslist[j] != ZERO_ADDRESS, "Invalid asset address."
     self.assets=assetslist
     for j in range(N):
+        assert LPToken(lptokenslist[j]).totalSupply() == 0, "Invalid LP token address."
         self.lptokens[j] = LPToken(lptokenslist[j])
-        self.price_feeds[j] = AggregatorV3Interface(_price_feed_address[j])
+        self.price_feeds[j] = AggregatorV3Interface(_price_feed_addresses[j])
     self.balances = LIST_OF_ZEROES
     self.lp_tokens_issued = LIST_OF_ZEROES
     self.fee_address = fee_collector
@@ -141,31 +158,57 @@ def __init__(_owner: address, assetslist: address[N], lptokenslist: address[N], 
 
 @external
 def set_owner(_owner: address):
+    """
+    @notice Sets a new pool owner. Can only be executed by the pool owner.
+    @param _owner Address of the new pool owner.
+    """
     assert msg.sender == self.owner, "You do not have permission to set a new owner."
     self.owner = _owner
 
 @external
 def set_new_fee_collector(fee_collector: address):
+    """
+    @notice Sets a new address to collect fees. Can only be executed by the pool owner.
+    @param fee_collector Address where the fees will be sent to.
+    """
     assert msg.sender == self.owner, "You do not have permission to set a new fee collector."
     self.fee_address = fee_collector
 
 @external
 def disable_deposits(i: uint8):
+    """
+    @notice Disables deposits of a certain asset of the pool. Can only be executed by the pool owner.
+    @param i Index of the asset (from 0 to N-1) that will be disabled for deposits.
+    """
     assert msg.sender == self.owner, "You do not have permission to disable deposits."
     self.deposits_enabled[i] = False
 
 @external
 def enable_deposits(i: uint8):
+    """
+    @notice Enables deposits of a certain asset of the pool. Can only be executed by the pool owner.
+    @param i Index of the asset (from 0 to N-1) that will be enabled for deposits.
+    """
     assert msg.sender == self.owner, "You do not have permission to enable deposits."
     self.deposits_enabled[i] = True
 
 @external
 def set_new_price_feed(i: uint8, price_feed_address: address):
+    """
+    @notice Sets a new address from where the oracle price of a certain asset will be taken. Can only be executed by the pool owner.
+    @param i Index of the asset (from 0 to N-1) of which we will set a new price feed.
+    @param price_feed_address The address of the new price feed that will be set.
+    """
     assert msg.sender == self.owner, "You do not have permission to set a new price feed."
     self.price_feeds[i] = AggregatorV3Interface(price_feed_address)
 
 @external
 def set_new_minimum_trade_amount(i: uint8, amount: decimal):
+    """
+    @notice Sets a new minimum trade amount for a certain asset. Can only be executed by the pool owner.
+    @param i Index of the asset (from 0 to N-1) of which we will set a new minimum trade amount.
+    @param amount The new minimum trading amount that will be set.
+    """
     assert msg.sender == self.owner, "You do not have permission to set new minimum trade amounts."
     assert amount >= 0.0, "The minimum trading amount must be non-negative."
     self.minimum_trade_amounts[i] = amount
@@ -182,6 +225,7 @@ def set_new_minimum_trade_amount(i: uint8, amount: decimal):
 @internal
 @view
 def get_latest_price(i: uint8) -> int256:
+    """Obtains the latest price of token i from the oracle."""
     a: uint80 = 0
     price: int256 = 0
     b: uint256 = 0
@@ -282,6 +326,7 @@ def pow_d(x: decimal, a: decimal) -> decimal:
 @internal
 @view
 def power(x: decimal, a: decimal) -> decimal:
+    """Computes x^a, where a is a real number that belongs to the interval [0,128)."""
     n: int256 = floor(a)
     floor_a: decimal = convert(floor(a), decimal)
     b: decimal = a-floor_a
@@ -291,6 +336,7 @@ def power(x: decimal, a: decimal) -> decimal:
 @internal
 @view
 def decimal_to_uint_lptokens(x: decimal) -> uint256:
+    """Converts a decimal to an uint according to the corresponding number of decimals of the LPToken implementation."""
     if x>=0.0:
         return convert(floor(x*LPTOKENS_FACTOR),uint256)
     return 0
@@ -298,6 +344,7 @@ def decimal_to_uint_lptokens(x: decimal) -> uint256:
 @internal
 @view
 def decimal_to_uint_assets(x: decimal, i: uint8) -> uint256:
+    """Converts a decimal to an uint according to the corresponding number of decimals of the asset's ERC20 implementation. The index i is the index of the asset in the pool."""
     if x>=0.0:
         factor: decimal = CONVERSION_RATES[i]
         return convert(floor(x*factor),uint256)
@@ -306,6 +353,7 @@ def decimal_to_uint_assets(x: decimal, i: uint8) -> uint256:
 @internal
 @view
 def price_to_decimal(x: int256) -> decimal:
+    """Converts a the price taken from the oracle (currenty int256, 8 decimal places) to a Vyper decimal."""
     if x>=0:
         return convert(x,decimal)/100000000.0
     return 0.0
@@ -356,7 +404,7 @@ def imbalance_ratios(balances: decimal[N], lp_tokens_issued: decimal[N], prices:
 @internal
 @view
 def check_imbalance_ratios(balances: decimal[N], lp_tokens_issued: decimal[N], prices: decimal[N], i: uint8, o: uint8, ai: decimal, ao: decimal, pr_fee: decimal) -> bool:
-    """ Checks if the imbalance ratios after a trade belong to the corresponding range (or if they are closer to the range than before the trade."""
+    """ Checks if the imbalance ratios after a trade belong to the corresponding range (or if they are closer to the range than before the trade)."""
     balances_before: decimal[N] = balances # check that the list is copied and that the original list is not modified
     balances_after: decimal[N] = balances  # check that the list is copied and that the original list is not modified
     balances_after[i]=balances[i]+ai-pr_fee
@@ -371,6 +419,7 @@ def check_imbalance_ratios(balances: decimal[N], lp_tokens_issued: decimal[N], p
 @internal
 @view
 def check_imbalance_ratios_message(execute: bool) -> String[100]:
+    """Returns a message according to the trade being executed or not."""
     if execute == True:
         return "Trade executed."
     else:
@@ -525,7 +574,7 @@ def trade_o(i: uint8,o: uint8,ao: decimal, balances: decimal[N], lp_tokens_issue
 @view
 def single_asset_deposit(i: uint8, ai: decimal, balances: decimal[N], lp_tokens_issued: decimal[N], prices: decimal[N])-> decimal:
     """
-    Performs a single asset deposit of amount i of token i.
+    Computes the parameters of a single asset deposit of amount i of token i.
     Returns the amount of LP tokens that must be given to the liquidity provider.
     """
     # we divide into cases
@@ -664,13 +713,22 @@ def single_asset_withdrawal(o: uint8, lpt: decimal, balances: decimal[N], lp_tok
 
 @external
 def pool_state(prices: decimal[N]):
-    # Here the prices are given manually to avoid paying fees for calling the oracle.
-    # think about some restriction on trades (minimal amount, for example) to avoid losing money paying fees to call the oracle.
+    """
+    @notice Logs the pool balances, the LP tokens in circulation and imbalance ratios with respect to the given prices.
+    @dev The prices are given manually to avoid paying fees for calling the oracle.
+    @param prices A list with the market prices of each asset.
+    """
     Imb: decimal[N] = self.imbalance_ratios(self.balances, self.lp_tokens_issued, prices)
-    log Log_pool_state('Balances:',self.balances,'LP tokens issued:',self.lp_tokens_issued,'Imbalance ratios:',Imb)
+    log Log_pool_state('Balances:',self.balances,'LP tokens issued:',self.lp_tokens_issued,'Imbalance ratios:',Imb,'Prices given as parameters:',prices)
 
 @external
 def trade_amount_in(i: uint8, o: uint8, ai: decimal):
+    """
+    @notice Performs a trade given the amount of the asset that goes into the pool.
+    @param i Index of the asset that goes into the pool.
+    @param o Index of the asset that goes out of the pool.
+    @param ai Amount of the asset that goes into the pool.
+    """
     assert ai >= 0.0, "The trading amount must be non-negative."
     assert ai >= self.minimum_trade_amounts[i], "The trading amount is too small."
     assert self.lp_tokens_issued[i] > 0.0, "The trade is not allowed because there are no LP tokens of the in-token type in circulation."
@@ -709,6 +767,12 @@ def trade_amount_in(i: uint8, o: uint8, ai: decimal):
 
 @external
 def trade_amount_out(i: uint8, o: uint8, ao: decimal):
+    """
+    @notice Performs a trade given the amount of the asset that goes out of the pool.
+    @param i Index of the asset that goes into the pool.
+    @param o Index of the asset that goes out of the pool.
+    @param ao Amount of the asset that goes out of the pool.
+    """
     # First we perform some simple checks.
     assert ao >= 0.0, "The trading amount must be non-negative."
     assert ao >= self.minimum_trade_amounts[o], "The trading amount is too small."
@@ -745,10 +809,19 @@ def trade_amount_out(i: uint8, o: uint8, ao: decimal):
 
 @external
 def liquidity_deposit(i: uint8, ai: decimal):
+    """
+    @notice Performs a liquidity deposit into the pool.
+    @param i Index of the asset that will be deposited.
+    @param ai Amount of asset i that will be deposited.
+    """
     input_asset: address = self.assets[i]
     assert self.deposits_enabled[i] == True, "Deposits of this asset are temporarily disabled."
     assert ai > 0.0, "The amount to deposit must be a positive number."
     assert Token(input_asset).balanceOf(msg.sender) >= self.decimal_to_uint_assets(ai,i) , "You do not have enough tokens to deposit."
+    # In the following lines we check that no LP tokens have been minted previously, to protect users.
+    # Otherwise, the contract can be initialized, some LP tokens minted, and after that the minting authority passed to the pool, exposing LPs to losses of their funds.
+    if self.lp_tokens_issued[i] == 0.0:
+        assert self.lptokens[i].totalSupply() == 0, "LP token address is compromised."
     prices: decimal[N] = LIST_OF_ZEROES
     for j in range(N):
         price_j_int256: int256 = self.get_latest_price(j)
@@ -774,6 +847,11 @@ def liquidity_deposit(i: uint8, ai: decimal):
 
 @external
 def liquidity_withdrawal(o: uint8, lpt: decimal):
+    """
+    @notice Performs a liquidity withdrawal.
+    @param o Index of the asset that corresponds to the LP tokens the user has.
+    @param lpt Amount of LP tokens that will be redeemed.
+    """
     lptok: LPToken = self.lptokens[o]
     assert lptok.balanceOf(msg.sender) >= self.decimal_to_uint_lptokens(lpt) , "You do not have enough LP tokens."
     prices: decimal[N] = LIST_OF_ZEROES
@@ -794,7 +872,7 @@ def liquidity_withdrawal(o: uint8, lpt: decimal):
             # transfer to liquidity provider
             output_asset: address = self.assets[j]
             amount_out: uint256 = self.decimal_to_uint_assets(out.amounts[j], j)
-            # For the final version we will need to call ERC20 instead of Token, as in the line below, which serves as an example.
+            # For the final version perhaps we will need to call ERC20 instead of Token, as in the line below, which serves as an example.
             # Check this.
             #ERC20(output_asset).transfer(msg.sender,amount_out)
             Token(output_asset).transfer(msg.sender,amount_out)
