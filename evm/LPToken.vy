@@ -36,7 +36,7 @@ allowances: public(HashMap[address, HashMap[address, uint256]])
 def __init__(_name: String[64], _symbol: String[32]):
     self.name = _name
     self.symbol = _symbol
-    self.decimals = 10
+    self.decimals = 18
     self.minter=msg.sender
     _total_supply: uint256 = 0
     #self.balances[msg.sender] = _total_supply
@@ -161,14 +161,46 @@ def burnFrom(_to: address, _value: uint256) -> bool:
 
 @external
 def set_minter(_minter: address):
-    # the following line needs to be uncommented for security reasons
-    # it has been commented for testing purposes only
     assert msg.sender == self.minter, "You do not have permission to set a new minter."
     self.minter = _minter
 
 
+#@external
+#def set_name(_name: String[64], _symbol: String[32]):
+    #assert msg.sender == self.minter, "You do not have permission to change the token name and its symbol."
+    #self.name = _name
+    #self.symbol = _symbol
+
+
 @external
-def set_name(_name: String[64], _symbol: String[32]):
-    assert msg.sender == self.minter, "You do not have permission to change the token name and its symbol."
-    self.name = _name
-    self.symbol = _symbol
+def increaseAllowance(_spender: address, _added_value: uint256) -> bool:
+    """
+    @notice Increase the allowance granted to `_spender` by the caller
+    @dev This is alternative to {approve} that can be used as a mitigation for
+         the potential race condition
+    @param _spender The address which will transfer the funds
+    @param _added_value The amount of to increase the allowance
+    @return bool success
+    """
+    allowance: uint256 = self.allowances[msg.sender][_spender] + _added_value
+    self.allowances[msg.sender][_spender] = allowance
+
+    log Approval(msg.sender, _spender, allowance)
+    return True
+
+
+@external
+def decreaseAllowance(_spender: address, _subtracted_value: uint256) -> bool:
+    """
+    @notice Decrease the allowance granted to `_spender` by the caller
+    @dev This is alternative to {approve} that can be used as a mitigation for
+         the potential race condition
+    @param _spender The address which will transfer the funds
+    @param _subtracted_value The amount of to decrease the allowance
+    @return bool success
+    """
+    allowance: uint256 = self.allowances[msg.sender][_spender] - _subtracted_value
+    self.allowances[msg.sender][_spender] = allowance
+
+    log Approval(msg.sender, _spender, allowance)
+    return True
