@@ -1,6 +1,6 @@
-# Oracle-based AMM
+# Rebalancing AMM
 
-The oracle-based AMM (OAMM) is an AMM that takes prices from an oracle in order to avoid impermanent loss. This code was written for the Solana network using [Seahorse](https://seahorse-lang.org/) 0.2.5.
+The Rebalancing AMM (RAMM) is an AMM that takes prices from an oracle in order to avoid impermanent loss. This code was written for the Solana network using [Seahorse](https://seahorse-lang.org/) 0.2.5.
 
 The particular code of this repository is designed for a SOL/USDC/USDT pool, but with a few tweaks in can be easily adapted to any pool with any number of tokens. 
 
